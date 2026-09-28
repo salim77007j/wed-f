@@ -128,9 +128,13 @@ int main(int argc, char *argv[])
         db->setPermission(QStringLiteral("https://example.com"), QStringLiteral("Geolocation"), 2);
         CHECK(db->permission(QStringLiteral("https://example.com"), QStringLiteral("Geolocation")) == 2,
               "permission persistence");
-        db->setShieldException(QStringLiteral("tracker.example"), true);
+        // shield exception through the engine (writes DB + refreshes cache)
+        PrivacyEngine::instance()->setShieldException(QStringLiteral("tracker.example"), true);
         CHECK(!PrivacyEngine::instance()->shieldsEnabledFor(QStringLiteral("tracker.example")),
               "shield exception honored");
+        PrivacyEngine::instance()->setShieldException(QStringLiteral("tracker.example"), false);
+        CHECK(PrivacyEngine::instance()->shieldsEnabledFor(QStringLiteral("tracker.example")),
+              "shield exception cleared");
 
         w->navigateCurrent(testPage);
         step(2500, [&] {
