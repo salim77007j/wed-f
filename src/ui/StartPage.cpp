@@ -17,6 +17,7 @@
 namespace {
 class DialTile : public QFrame
 {
+    Q_OBJECT
 public:
     DialTile(const QString &title, const QUrl &url, QWidget *parent = nullptr)
         : QFrame(parent), m_url(url)
@@ -255,3 +256,5 @@ void StartPage::resizeEvent(QResizeEvent *e)
     QWidget::resizeEvent(e);
     update();
 }
+
+#include "StartPage.moc"

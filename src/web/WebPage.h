@@ -1,9 +1,12 @@
 #pragma once
 #include <QtWebEngineCore/QWebEnginePage>
+#include <QtWebEngineCore/QWebEngineFullScreenRequest>
+#include <QtWebEngineCore/QWebEngineCertificateError>
+#include <QDialog>
+#include <QCheckBox>
 #include <QSet>
 #include <functional>
 
-class QWebEngineCertificateError;
 
 // QWebEnginePage with real permission brokering, certificate decisions,
 // session-remembered certificate overrides, and shell integration points.

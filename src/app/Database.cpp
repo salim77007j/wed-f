@@ -595,7 +595,7 @@ int HistoryTableModel::columnCount(const QModelIndex &parent) const
 QVariant HistoryTableModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_rows.size()) return {};
-    const HistoryEntry &e = m_rows.at(index.row());
+    const Database::HistoryEntry &e = m_rows.at(index.row());
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case 0: return e.title.isEmpty() ? e.host : e.title;
@@ -644,7 +644,7 @@ int BookmarksModel::columnCount(const QModelIndex &parent) const
 QVariant BookmarksModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_rows.size()) return {};
-    const BookmarkNode &n = m_rows.at(index.row());
+    const Database::BookmarkNode &n = m_rows.at(index.row());
     if (role == Qt::DisplayRole) {
         if (index.column() == 0) return n.folder ? n.title : (n.title.isEmpty() ? n.url : n.title);
         if (index.column() == 1) return n.folder ? QString() : n.url;

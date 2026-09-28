@@ -14,6 +14,7 @@
 #include "Toolbar.h"
 #include "Utils.h"
 #include "ProfileCatalog.h"
+#include "WebView.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -30,6 +31,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPdfDocument>
+#include <QPainter>
+#include <QWidgetAction>
+#include <QtWebEngineCore/QWebEngineCookieStore>
 #include <QPrintDialog>
 #include <QPrinter>
 #include <QRegularExpression>
@@ -538,11 +542,12 @@ void MainWindow::printFromPdf(const QString &path, bool success)
     QPainter painter(m_pendingPrinter);
     for (int i = 0; i < doc.pageCount(); ++i) {
         if (i > 0) m_pendingPrinter->newPage();
-        const QSizeF size = doc.pagePointSize(i);
-        const QSize target = m_pendingPrinter->pageRect().size();
-        QImage img = doc.render(i, target, QPdfDocument::RenderOptions());
+        const QSize target = m_pendingPrinter->pageLayout()
+                                 .paintRectPixels(m_pendingPrinter->resolution())
+                                 .size();
+        QImage img = doc.render(i, target);
         if (!img.isNull())
-            painter.drawImage(QRect(QPoint(0, 0), target).size() == size.toSize() ? QRect(QPoint(0, 0), target) : QRect(QPoint(0, 0), target), img);
+            painter.drawImage(QRect(QPoint(0, 0), target), img);
     }
     painter.end();
     QFile::remove(tmpPdf.fileName());
@@ -634,15 +639,19 @@ void MainWindow::onShieldPopup()
     QMenu m(this);
     QLabel *header = new QLabel(tr("<b>Protections for %1</b>").arg(host), &m);
     header->setContentsMargins(10, 8, 10, 4);
-    QAction *wa = m.addWidget(header);
+    auto *wa = new QWidgetAction(&m);
+    wa->setDefaultWidget(header);
     wa->setEnabled(false);
+    m.addAction(wa);
     QLabel *body = new QLabel(tr("Blocked on this page: %1 ads, %2 trackers<br>"
                                  "Blocked all-time here: %3 ads, %4 trackers")
                               .arg(t->pageAdsBlocked()).arg(t->pageTrackersBlocked())
                               .arg(st.ads).arg(st.trackers), &m);
     body->setContentsMargins(10, 0, 10, 8);
-    QAction *wb = m.addWidget(body);
+    auto *wb = new QWidgetAction(&m);
+    wb->setDefaultWidget(body);
     wb->setEnabled(false);
+    m.addAction(wb);
     QAction *toggle = m.addAction(off ? tr("Enable protections for this site")
                                       : tr("Turn off protections for this site"));
     connect(toggle, &QAction::triggered, this, [this, host, off] {
@@ -665,8 +674,10 @@ void MainWindow::onSiteInfoPopup()
     QLabel *header = new QLabel(tr("<b>%1</b><br><small>%2</small>").arg(u.host().isEmpty() ? tr("This page") : u.host(), u.toString().toHtmlEscaped()), &m);
     header->setTextFormat(Qt::RichText);
     header->setContentsMargins(10, 8, 10, 8);
-    QAction *wh = m.addWidget(header);
+    auto *wh = new QWidgetAction(&m);
+    wh->setDefaultWidget(header);
     wh->setEnabled(false);
+    m.addAction(wh);
     m.addSeparator();
     QAction *permissions = m.addAction(tr("Site settings…"));
     connect(permissions, &QAction::triggered, this, [this] { showSettings(SettingsDialog::PagePermissions); });

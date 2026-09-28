@@ -6,6 +6,7 @@
 #include "DownloadManager.h"
 #include "MainWindow.h"
 #include "ThemeManager.h"
+#include "TabWidget.h"
 
 #include <QAction>
 #include <QApplication>

@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QSet>
+#include <QUrl>
 #include <QStandardPaths>
 #include <QCoreApplication>
 

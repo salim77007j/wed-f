@@ -13,7 +13,7 @@ endif()
 
 option(WED_BUILD_TESTS "Build the self-test harness" ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets WebEngineWidgets WebEngineCore Sql Network)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Widgets WebEngineWidgets WebEngineCore Sql Network PdfWidgets)
 
 # ------------------------------------------------------------------ Rust core
 set(WED_RUST_DIR ${CMAKE_SOURCE_DIR}/src/core)
@@ -26,6 +26,13 @@ endif()
 
 find_program(CARGO_EXE cargo REQUIRED)
 
+# user-space sysroot EGL (containers without system GL dev packages)
+if(EXISTS "/home/z/sysroot/usr/lib/x86_64-linux-gnu/libEGL.so")
+  set(CMAKE_SYSROOT_EGL /home/z/sysroot/usr/lib/x86_64-linux-gnu/libEGL.so)
+else()
+  set(CMAKE_SYSROOT_EGL EGL)
+endif()
+
 add_custom_target(
   wed_rust ALL
   COMMAND ${CARGO_EXE} build --release --manifest-path ${WED_RUST_DIR}/Cargo.toml
@@ -35,19 +42,8 @@ add_custom_target(
   COMMENT "Building Rust privacy core"
   VERBATIM)
 
-# ------------------------------------------------------------------ Resources
-qt_add_resources(wed_res "wed"
-  PREFIX "/"
-  FILES
-    src/resources/js/fingerprint.js
-    src/resources/lists/easylist.txt
-    src/resources/lists/easyprivacy.txt
-    src/resources/icons/app.png
-)
-
-# ------------------------------------------------------------------ Executable
-set(WED_SOURCES
-  src/main.cpp
+# ------------------------------------------------------------------ app object library
+set(WED_APP_SOURCES
   src/app/AppSettings.cpp
   src/app/Database.cpp
   src/app/SessionManager.cpp
@@ -70,8 +66,9 @@ set(WED_SOURCES
   src/ui/FindBar.cpp
 )
 
-add_executable(wed WIN32 ${WED_SOURCES} src/app/AppSettings.h src/app/Database.h
-  src/app/SessionManager.h src/app/ThemeManager.h src/app/Utils.h
+set(WED_APP_HEADERS
+  src/app/AppSettings.h src/app/Database.h src/app/SessionManager.h
+  src/app/ThemeManager.h src/app/Utils.h
   src/privacy/PrivacyEngine.h src/privacy/RequestInterceptor.h
   src/web/WebPage.h src/web/WebView.h src/web/DownloadManager.h
   src/web/ProfileCatalog.h src/ui/MainWindow.h src/ui/TabWidget.h
@@ -79,27 +76,51 @@ add_executable(wed WIN32 ${WED_SOURCES} src/app/AppSettings.h src/app/Database.h
   src/ui/Panels.h src/ui/SettingsDialog.h src/ui/PrivacyDashboard.h
   src/ui/FindBar.h)
 
+add_library(wed_app OBJECT ${WED_APP_SOURCES} ${WED_APP_HEADERS})
+target_include_directories(wed_app PRIVATE src src/app src/ui src/web src/privacy)
+target_link_libraries(wed_app PUBLIC Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network Qt6::PdfWidgets)
+
+set(WED_RES_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/js/fingerprint.js
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/lists/easylist.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/lists/easyprivacy.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/icons/app.png)
+
+# ------------------------------------------------------------------ browser executable
+add_executable(wed WIN32 src/main.cpp $<TARGET_OBJECTS:wed_app>)
+qt_add_resources(wed "app"
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/src/resources"
+    FILES ${WED_RES_FILES})
 set_target_properties(wed PROPERTIES OUTPUT_NAME "wed-browser")
 
 target_link_libraries(wed PRIVATE
-  Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network
+  Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network Qt6::PdfWidgets
   ${WED_RUST_LIB})
-
 add_dependencies(wed wed_rust)
 
 if(UNIX AND NOT APPLE)
-  target_link_libraries(wed PRIVATE dl pthread m)
+  target_link_libraries(wed PRIVATE dl pthread m ${CMAKE_SYSROOT_EGL})
 endif()
 
 target_include_directories(wed PRIVATE src src/app src/ui src/web src/privacy)
 
-# Self-test harness drives the real browser headlessly (screenshots, scripted runs)
+# ------------------------------------------------------------------ self-test harness
+# Drives the real browser headlessly (screenshots, scripted runs).
 if(WED_BUILD_TESTS)
-  add_executable(wed-selftest tests/selftest.cpp)
+  add_executable(wed-selftest tests/selftest.cpp $<TARGET_OBJECTS:wed_app>)
+  qt_add_resources(wed-selftest "app"
+      PREFIX "/"
+      BASE "${CMAKE_CURRENT_SOURCE_DIR}/src/resources"
+      FILES ${WED_RES_FILES})
   target_link_libraries(wed-selftest PRIVATE
-    Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network ${WED_RUST_LIB})
+    Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network Qt6::PdfWidgets
+    ${WED_RUST_LIB})
   add_dependencies(wed-selftest wed_rust)
   target_include_directories(wed-selftest PRIVATE src src/app src/ui src/web src/privacy)
+  if(UNIX AND NOT APPLE)
+    target_link_libraries(wed-selftest PRIVATE dl pthread m ${CMAKE_SYSROOT_EGL})
+  endif()
 endif()
 
 install(TARGETS wed RUNTIME DESTINATION bin)

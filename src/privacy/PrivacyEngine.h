@@ -22,6 +22,13 @@ void wed_core_stats(WedCore core, unsigned long long *ads, unsigned long long *t
 long long wed_core_rule_count(WedCore core);
 }
 
+// Per-host blocked counters accumulated on Chromium IO threads, flushed to DB.
+struct WedCounters {
+    quint32 ads = 0;
+    quint32 trackers = 0;
+    quint32 cookies = 0;
+};
+
 // Central privacy orchestrator. `check()` is called from Chromium IO threads;
 // everything DB-related is deferred to the main thread (flush timer).
 class PrivacyEngine : public QObject
@@ -60,12 +67,13 @@ private:
     explicit PrivacyEngine(QObject *parent = nullptr);
     ~PrivacyEngine() override;
     void loadListsImpl();
+    void syncAllowlistLocked();
 
     WedCore m_core = nullptr;
     QMutex m_mutex;                 // guards m_core calls + pending stats
-    QMutex m_exMutex;
+    mutable QMutex m_exMutex;
     QStringList m_exceptions;
-    QHash<QString, quint32[3]> m_pending; // host -> {ads, trackers, cookies}
+    QHash<QString, WedCounters> m_pending; // host -> counters
     QTimer m_flushTimer;
     unsigned long long m_sessionAds = 0;
     unsigned long long m_sessionTrackers = 0;

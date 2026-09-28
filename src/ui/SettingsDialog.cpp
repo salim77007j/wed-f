@@ -8,6 +8,8 @@
 #include "ThemeManager.h"
 #include "Utils.h"
 
+#include <QtWebEngineCore/QWebEngineCookieStore>
+
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>

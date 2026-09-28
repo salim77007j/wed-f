@@ -9,6 +9,7 @@
 #include "WebView.h"
 
 #include <QApplication>
+#include <QtWebEngineCore/QWebEngineHistory>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -179,6 +180,12 @@ bool BrowserTab::isMuted() const { return m_page ? m_page->isAudioMuted() : fals
 void BrowserTab::setMuted(bool m)
 {
     if (m_page) m_page->setAudioMuted(m);
+}
+
+void BrowserTab::setPinned(bool p)
+{
+    m_pinned = p;
+    emit titleChanged(title());
 }
 
 void BrowserTab::focusView()

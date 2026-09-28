@@ -3,6 +3,7 @@
 #include "ThemeManager.h"
 
 #include <QHBoxLayout>
+#include <QtWebEngineCore/QWebEngineFindTextResult>
 #include <QLabel>
 #include <QLineEdit>
 #include <QShortcut>

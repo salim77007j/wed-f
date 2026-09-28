@@ -2,8 +2,12 @@
 #include <QWidget>
 #include <QStackedWidget>
 #include <QTimer>
+#include <QtWebEngineCore/QWebEnginePage>
+#include <QtWebEngineWidgets/QWebEngineView>
 
-class WebPage;
+#include "WebPage.h"
+
+
 class WebView;
 class StartPage;
 

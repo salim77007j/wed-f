@@ -158,9 +158,9 @@ void PrivacyDashboard::refreshData()
 
     const bool el = s->easyListEnabled(), ep = s->easyPrivacyEnabled();
     m_lists->setText(tr("Filter lists: EasyList (%1), EasyPrivacy (%2) — %L3 active rules")
-                     .arg(el ? tr("enabled") : tr("disabled"),
-                          ep ? tr("enabled") : tr("disabled"),
-                          pe->ruleCount()));
+                     .arg(el ? tr("enabled") : tr("disabled"))
+                     .arg(ep ? tr("enabled") : tr("disabled"))
+                     .arg(pe->ruleCount()));
 
     const QList<Database::SiteStats> rows = db->siteStats(50);
     m_sites->setRowCount(rows.size());

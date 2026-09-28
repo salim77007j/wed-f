@@ -3,9 +3,11 @@
 #include <QTabBar>
 #include <QTimer>
 #include <QStack>
+#include <QtWebEngineCore/QWebEnginePage>
 
 class BrowserTab;
 class MainWindow;
+class WebView;
 
 // Tab bar with: close-on-hover buttons, pinned tabs, audio indicators,
 // drag reordering, detach-to-window (drag outside bar), context menu.

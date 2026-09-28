@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QUrl>
 #include <QStandardPaths>
 
 // Content-type bits (must match src/core/src/filters.rs CT_*)
@@ -153,11 +154,9 @@ int PrivacyEngine::check(const QUrl &requestUrl, const QUrl &firstPartyUrl, int 
         wed_core_stats(m_core, &a, &t);
         m_sessionAds = a;
         m_sessionTrackers = t;
-        quint32 *slot = m_pending[pageHost];
-        if (slot) {
-            if (d == BlockedAd) slot[0]++;
-            else slot[1]++;
-        }
+        WedCounters &slot = m_pending[pageHost];
+        if (d == BlockedAd) slot.ads++;
+        else slot.trackers++;
         const QString reqHost = Utils::hostOfUrl(requestUrl);
         // queued emission to main thread receivers
         emit blocked(firstPartyUrl.toString(), reqHost, d);
@@ -171,9 +170,9 @@ void PrivacyEngine::flushStats()
     if (m_pending.isEmpty()) return;
     const auto keys = m_pending.keys();
     for (const QString &host : keys) {
-        const quint32 *v = m_pending.value(host);
-        if (v[0] || v[1] || v[2])
-            Database::instance()->incrementStats(host, int(v[0]), int(v[1]), int(v[2]));
+        const WedCounters c = m_pending.value(host);
+        if (c.ads || c.trackers || c.cookies)
+            Database::instance()->incrementStats(host, int(c.ads), int(c.trackers), int(c.cookies));
         m_pending.remove(host);
     }
 }

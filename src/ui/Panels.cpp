@@ -217,7 +217,7 @@ BookmarksPanel::BookmarksPanel(MainWindow *window, QWidget *parent)
     auto *importBtn = new QPushButton(tr("Import…"), this);
     connect(importBtn, &QPushButton::clicked, this, [this] {
         const QString f = QFileDialog::getOpenFileName(this, tr("Import bookmarks"), QString(), "JSON (*.json)");
-        if (f.isEmpty()) return();
+        if (f.isEmpty()) return;
         QFile file(f);
         if (!file.open(QIODevice::ReadOnly)) return;
         const QString json = QString::fromUtf8(file.readAll());
@@ -231,7 +231,7 @@ BookmarksPanel::BookmarksPanel(MainWindow *window, QWidget *parent)
     auto *exportBtn = new QPushButton(tr("Export…"), this);
     connect(exportBtn, &QPushButton::clicked, this, [this] {
         const QString f = QFileDialog::getSaveFileName(this, tr("Export bookmarks"), "wed-bookmarks.json", "JSON (*.json)");
-        if (f.isEmpty()) return();
+        if (f.isEmpty()) return;
         QFile file(f);
         if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             file.write(Database::instance()->exportBookmarksJson().toUtf8());
@@ -256,9 +256,8 @@ void BookmarksPanel::buildTree()
     for (int pass = 0; pass < 4; ++pass) {
         for (const Database::BookmarkNode &n : Database::instance()->allBookmarks()) {
             if (map.contains(n.id) || !map.contains(n.parent)) continue;
-            auto *item = new QStandardItem(n.folder ? Icons::themed("folder")
-                                                     : Icons::themed("star"));
-            item->setText(n.title.isEmpty() ? n.url : n.title);
+            auto *item = new QStandardItem(n.title.isEmpty() ? n.url : n.title);
+            item->setIcon(n.folder ? Icons::themed("folder") : Icons::themed("star"));
             item->setEditable(true);
             item->setData(n.id, Qt::UserRole + 1);
             item->setData(n.parent, Qt::UserRole + 2);

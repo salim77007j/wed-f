@@ -16,7 +16,7 @@ public:
 
     struct HistoryEntry { qint64 id; QString url; QString title; QDateTime visited; int visits; QString host; };
     struct BookmarkNode { qint64 id; qint64 parent; QString title; QString url; int pos; bool folder; };
-    struct SiteStats { QString host; int ads; int trackers; int cookiesBlocked; };
+    struct SiteStats { QString host; int ads; int trackers; int cookies; };
     struct PermissionRow { QString origin; QString feature; int policy; };
 
     // history

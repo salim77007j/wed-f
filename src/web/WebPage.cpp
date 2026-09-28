@@ -7,6 +7,7 @@
 #include <QtWebEngineCore/QWebEngineProfile>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QFile>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -24,6 +25,15 @@ WebPage::WebPage(QWebEngineProfile *profile, QObject *parent)
     connect(this, &QWebEnginePage::certificateError, this, &WebPage::onCertificateError);
 }
 
+static QWidget *pageHostWidget(QWebEnginePage *p)
+{
+    // walk QObject parents to the nearest widget window
+    for (QObject *o = p->parent(); o; o = o->parent())
+        if (auto *w = qobject_cast<QWidget *>(o))
+            return w->window();
+    return nullptr;
+}
+
 QString WebPage::featureName(QWebEnginePage::Feature f)
 {
     switch (f) {
@@ -34,8 +44,6 @@ QString WebPage::featureName(QWebEnginePage::Feature f)
     case QWebEnginePage::DesktopVideoCapture: return "Screen capture";
     case QWebEnginePage::DesktopAudioVideoCapture: return "Screen + audio capture";
     case QWebEnginePage::Notifications: return "Notifications";
-    case QWebEnginePage::ClipboardReadWrite: return "Clipboard";
-    case QWebEnginePage::LocalFontsAccess: return "Local fonts";
     case QWebEnginePage::MouseLock: return "Mouse lock";
     default: return "Permission";
     }
@@ -51,7 +59,6 @@ QString WebPage::featureIcon(QWebEnginePage::Feature f)
     case QWebEnginePage::DesktopVideoCapture:
     case QWebEnginePage::DesktopAudioVideoCapture: return "camera";
     case QWebEnginePage::Notifications: return "notification";
-    case QWebEnginePage::ClipboardReadWrite: return "clipboard";
     case QWebEnginePage::MouseLock: return "mouse";
     default: return "info";
     }
@@ -73,7 +80,7 @@ void WebPage::onFeaturePermissionRequested(const QUrl &origin, QWebEnginePage::F
     if (def == 2) { setFeaturePermission(origin, feature, QWebEnginePage::PermissionDeniedByUser); return; }
 
     // ask the user (modal, deferred decision)
-    PermissionDialog dlg(view() ? view()->window() : nullptr, origin, feature);
+    PermissionDialog dlg(pageHostWidget(this), origin, feature);
     if (dlg.exec() == QDialog::Accepted) {
         if (dlg.rememberChoice())
             Database::instance()->setPermission(originKey, fkey,
@@ -89,7 +96,7 @@ void WebPage::onFeaturePermissionRequested(const QUrl &origin, QWebEnginePage::F
 void WebPage::onFullScreenRequested(QWebEngineFullScreenRequest request)
 {
     request.accept();
-    QWidget *w = view() ? view()->window() : nullptr;
+    QWidget *w = pageHostWidget(this);
     if (!w) return;
     if (request.toggleOn())
         w->showFullScreen();
@@ -107,14 +114,14 @@ void WebPage::onCertificateError(const QWebEngineCertificateError &error)
         return;
     }
     if (!err.isOverridable()) {
-        QMessageBox::warning(view() ? view()->window() : nullptr, "Security warning",
+        QMessageBox::warning(pageHostWidget(this), "Security warning",
                              QStringLiteral("Connection blocked: the certificate for %1 is invalid "
                                              "and cannot be bypassed.\n\n%2")
                                  .arg(err.url().host(), err.description()));
         err.rejectCertificate();
         return;
     }
-    CertificateDialog dlg(view() ? view()->window() : nullptr, err);
+    CertificateDialog dlg(pageHostWidget(this), err);
     if (dlg.exec() == QDialog::Accepted && dlg.proceed()) {
         m_certOverrides.insert(err.url().host());
         err.acceptCertificate();

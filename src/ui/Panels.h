@@ -1,5 +1,8 @@
 #pragma once
 #include <QWidget>
+#include <QStandardItemModel>
+#include <QClipboard>
+#include <QApplication>
 #include <QTableView>
 #include <QTreeView>
 

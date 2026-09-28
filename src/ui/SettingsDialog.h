@@ -8,6 +8,7 @@ class QSpinBox;
 class QLineEdit;
 class QTableWidget;
 class QButtonGroup;
+class QLabel;
 
 // Clear-browsing-data dialog (also used from the Tools menu): real deletions
 // for history, cookies, cache, site stats and closed-tabs list.

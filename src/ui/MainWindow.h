@@ -10,6 +10,7 @@ class Toolbar;
 class FindBar;
 class BrowserTab;
 class QStatusBar;
+class QPrinter;
 class DownloadsPanel;
 class BookmarksPanel;
 class HistoryPanel;

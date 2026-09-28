@@ -8,7 +8,7 @@
 
 // Intercepts every outgoing request: blocks ads/trackers via the Rust engine,
 // attaches DNT / GPC privacy headers, enforces HTTPS-first main frames.
-class RequestInterceptor : public QObject, public QWebEngineUrlRequestInterceptor
+class RequestInterceptor : public QWebEngineUrlRequestInterceptor
 {
     Q_OBJECT
 public:

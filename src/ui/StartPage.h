@@ -1,5 +1,7 @@
 #pragma once
 #include <QWidget>
+#include <QLabel>
+#include <QLineEdit>
 
 class QLineEdit;
 class QVBoxLayout;
@@ -22,6 +24,8 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    void buildUi();
+    void rebuild();
     void buildDial();
     QWidget *tileFor(const QString &title, const QUrl &url, const QString &host);
     QWidget *m_dialHost = nullptr;

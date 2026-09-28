@@ -7,7 +7,7 @@
 
 #include <QApplication>
 #include <QCompleter>
-#include <QDesktopWidget>
+
 #include <QEvent>
 #include <QFocusEvent>
 #include <QFrame>
@@ -38,7 +38,7 @@ enum SuggestKind {
     KindWebSuggest,
     KindUrl,
 };
-enum SuggestData { RoleUrl = Qt::UserRole + 10, RoleInputText };
+enum SuggestData { RoleKind = Qt::UserRole + 9, RoleUrl = Qt::UserRole + 10, RoleInputText };
 
 AddressBar::AddressBar(QWidget *parent)
     : QWidget(parent)
@@ -301,7 +301,7 @@ void AddressBar::buildSuggestionModel(const QString &text)
     const QUrl direct = inputToUrl(t);
     if (!direct.isEmpty()) {
         QStandardItem *it = new QStandardItem(Icons::themed("globe"), direct.toString());
-        it->setData(KindUrl, SuggestKind);
+        it->setData(KindUrl, RoleKind);
         it->setData(direct.toString(), RoleUrl);
         m_model->appendRow(it);
     } else {
@@ -310,7 +310,7 @@ void AddressBar::buildSuggestionModel(const QString &text)
             if (e.id == AppSettings::instance()->searchEngine()) engine = e.name;
         QStandardItem *it = new QStandardItem(Icons::themed("search"),
                                               tr("Search %1 for \"%2\"").arg(engine, t));
-        it->setData(KindSearch, SuggestKind);
+        it->setData(KindSearch, RoleKind);
         it->setData(t, RoleUrl);
         m_model->appendRow(it);
     }
@@ -323,7 +323,7 @@ void AddressBar::buildSuggestionModel(const QString &text)
         QStandardItem *it = new QStandardItem(Icons::themed("history"),
                                               e.title.isEmpty() ? e.url : e.title);
         it->setData(e.url, RoleUrl);
-        it->setData(KindHistory, SuggestKind);
+        it->setData(KindHistory, RoleKind);
         QStandardItem *sub = new QStandardItem(e.url);
         sub->setData(e.url, RoleUrl);
         it->setChild(0, sub);
@@ -341,7 +341,7 @@ void AddressBar::buildSuggestionModel(const QString &text)
         QStandardItem *it = new QStandardItem(Icons::make("star-filled", ThemeManager::instance()->accent()),
                                               n.title.isEmpty() ? n.url : n.title);
         it->setData(n.url, RoleUrl);
-        it->setData(KindBookmark, SuggestKind);
+        it->setData(KindBookmark, RoleKind);
         it->setToolTip(n.url);
         m_model->appendRow(it);
     }
@@ -381,7 +381,7 @@ void AddressBar::fetchWebSuggestions(const QString &text)
             if (added++ >= 6) break;
             QStandardItem *it = new QStandardItem(Icons::themed("search"), s);
             it->setData(s, RoleUrl);
-            it->setData(KindWebSuggest, SuggestKind);
+            it->setData(KindWebSuggest, RoleKind);
             m_model->insertRow(row++, it);
         }
         if (added && m_popup->isVisible())
@@ -425,7 +425,7 @@ void AddressBar::moveSuggestion(int delta)
 void AddressBar::onSuggestionActivated(const QModelIndex &idx)
 {
     if (!idx.isValid()) return;
-    const int kind = idx.data(SuggestKind).toInt();
+    const int kind = idx.data(RoleKind).toInt();
     const QString data = idx.data(RoleUrl).toString();
     hidePopup();
     if (kind == KindSearch) {
@@ -441,7 +441,7 @@ void AddressBar::onSuggestionActivated(const QModelIndex &idx)
 void AddressBar::onSuggestionHighlighted(const QModelIndex &idx)
 {
     if (!idx.isValid()) return;
-    const int kind = idx.data(SuggestKind).toInt();
+    const int kind = idx.data(RoleKind).toInt();
     if (kind == KindSearch) return;
     m_edit->setText(idx.data(RoleUrl).toString());
 }

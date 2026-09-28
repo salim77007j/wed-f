@@ -12,7 +12,7 @@ a **privacy core written in Rust**, and drives a **100% native Qt Widgets UI**
 │  Native UI  (C++ / Qt 6 Widgets + QSS theming)│  tabs, address bar, menus,
 │  every control bound to real behavior         │  panels, dialogs, settings
 ├───────────────────────────────────────────────┤
-│  Chromium (Qt WebEngine 6.8)                  │  rendering, JS, networking
+│  Chromium (Qt WebEngine 6.7)                  │  rendering, JS, networking
 ├───────────────────────────────────────────────┤
 │  Rust core — wed_core (static C ABI)          │  ad/tracker network filter
 │  thread-safe, memory-safe, zero-copy FFI      │  engine + cosmetic engine
@@ -46,12 +46,12 @@ developer tools, extensive keyboard shortcuts, dark/light themes.
 
 ## Build
 
-Requirements: **Qt 6.8+ (Widgets, WebEngineWidgets, Sql, Network)**, **CMake ≥ 3.21**,
+Requirements: **Qt 6.7+ (Widgets, WebEngineWidgets, Sql, Network)**, **CMake ≥ 3.21**,
 **Ninja**, a C++17 compiler, and **Rust (cargo)**.
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_PREFIX_PATH=/path/to/Qt/6.8.3/gcc_64/lib/cmake
+      -DCMAKE_PREFIX_PATH=/path/to/Qt/6.7.3/gcc_64/lib/cmake
 cmake --build build --parallel
 ./build/wed-browser
 ```

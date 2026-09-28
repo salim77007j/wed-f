@@ -8,7 +8,7 @@
 #include <atomic>
 
 RequestInterceptor::RequestInterceptor(QObject *parent)
-    : QObject(parent), QWebEngineUrlRequestInterceptor()
+    : QWebEngineUrlRequestInterceptor(parent)
 {
 }
 

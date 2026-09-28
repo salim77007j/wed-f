@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  QT_VERSION: '6.8.3'
+  QT_VERSION: '6.7.3'
 
 jobs:
   build:
@@ -27,7 +27,7 @@ jobs:
             qt-arch: linux_gcc_64
           - name: windows-x64
             os: windows-latest
-            qt-arch: win64_msvc2022_64
+            qt-arch: win64_msvc2019_64
 
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt-arch }}
-          modules: qtwebengine
+          modules: qtwebengine qtpdf
           cache: true
 
       # ---------------- Linux deps ----------------

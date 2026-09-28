@@ -10,6 +10,7 @@
 #include "WebView.h"
 
 #include <QApplication>
+#include <QVBoxLayout>
 #include <QContextMenuEvent>
 #include <QMenu>
 #include <QMouseEvent>
@@ -218,7 +219,7 @@ BrowserTab *TabWidget::newTab(bool privateMode, bool background, const QUrl &url
     auto *tab = new BrowserTab(privateMode, this);
     wireTab(tab);
     const int idx = addTab(tab, tab->title());
-    setTabData(idx, false);
+    tabBar()->setTabData(idx, false);
     updateTabVisual(idx);
 
     // window.open plumbing
@@ -250,7 +251,7 @@ void TabWidget::wireTab(BrowserTab *tab)
             if (widget(i) == tab)
                 setTabIcon(i, ic);
     });
-    connect(tab, &BrowserTab::loadProgress, this, [this, tab](int prog) {
+    connect(tab, static_cast<void (BrowserTab::*)(int)>(&BrowserTab::loadProgress), this, [this, tab](int prog) {
         if (tab == currentTab())
             emit currentTabChanged(tab);
     });
@@ -368,10 +369,10 @@ void TabWidget::moveTab(int from, int to)
     QWidget *page = widget(from);
     const QIcon icon = tabIcon(from);
     const QString text = tabText(from);
-    const QVariant data = tabData(from);
+    const QVariant data = tabBar()->tabData(from);
     removeTab(from);
     insertTab(to, page, icon, text);
-    setTabData(to, data);
+    tabBar()->setTabData(to, data);
     setCurrentIndex(to);
 }
 
@@ -392,7 +393,7 @@ void TabWidget::detachTab(int index, const QPoint &globalPos)
 
 void TabWidget::setTabPinned(int index, bool pinned)
 {
-    setTabData(index, pinned);
+    tabBar()->setTabData(index, pinned);
     if (auto *tab = tabAt(index))
         tab->setPinned(pinned);
     setTabText(index, pinned ? QString() : tabText(index));
@@ -443,7 +444,7 @@ QUrl TabWidget::currentTabUrl() const
 
 WebView *TabWidget::createViewForType(QWebEnginePage::WebWindowType type, bool privateMode)
 {
-    if (type == QWebEnginePage::WebDialogWindowType) {
+    if (type == QWebEnginePage::WebDialog) {
         // real popup window: small frameless window with a web view
         auto *popup = new QWidget(nullptr, Qt::Window);
         popup->setAttribute(Qt::WA_DeleteOnClose);

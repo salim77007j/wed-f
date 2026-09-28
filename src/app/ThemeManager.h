@@ -3,6 +3,21 @@
 #include <QIcon>
 #include <QColor>
 
+// Roles used across custom widgets
+enum ColorRole {
+    RoleText,
+    RoleTextSecondary,
+    RoleChrome,
+    RoleChromeHover,
+    RoleToolbar,
+    RoleTab,
+    RoleTabActive,
+    RoleBorder,
+    RoleAccent,
+    RoleDanger,
+    RoleInputBg,
+};
+
 // Theme management: light / dark / follow-system, live QSS re-load, accent color.
 class ThemeManager : public QObject
 {
@@ -26,21 +41,6 @@ private:
     QString buildQss() const;
     bool m_dark = false;
     QColor m_accent;
-};
-
-// Roles used across custom widgets
-enum ColorRole {
-    RoleText,
-    RoleTextSecondary,
-    RoleChrome,
-    RoleChromeHover,
-    RoleToolbar,
-    RoleTab,
-    RoleTabActive,
-    RoleBorder,
-    RoleAccent,
-    RoleDanger,
-    RoleInputBg,
 };
 
 // Runtime-drawn flat icon set — recolored per theme, no external files.

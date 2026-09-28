@@ -4,6 +4,7 @@
 #include <QAbstractTableModel>
 #include <QTimer>
 #include <QQueue>
+#include <QtWebEngineCore/QWebEngineDownloadRequest>
 
 class QWebEngineDownloadRequest;
 class QProgressDialog;

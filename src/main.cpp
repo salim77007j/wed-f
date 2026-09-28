@@ -18,6 +18,10 @@
 #include <QTimer>
 #include <QVersionNumber>
 
+#ifdef Q_OS_LINUX
+#include <unistd.h>
+#endif
+
 #include "MainWindow.h"
 #include "AppSettings.h"
 #include "Database.h"
@@ -36,7 +40,8 @@ static void createWindow(bool privateMode, const QStringList &urls)
     MainWindow *w = new MainWindow(privateMode, urls);
     w->setAttribute(Qt::WA_DeleteOnClose);
     g_windows.append(w);
-    QObject::connect(w, &MainWindow::newWindowRequested, &createWindow);
+    QObject::connect(w, &MainWindow::newWindowRequested, w,
+                     [](bool priv) { createWindow(priv, QStringList()); });
     QObject::connect(w, &MainWindow::lastWindowClosed, [w] {
         // window closes itself; drop from registry
         g_windows.removeAll(w);
@@ -67,11 +72,39 @@ static void openForwardedUrls(const QStringList &urls)
 
 int main(int argc, char *argv[])
 {
+    // Static app identity early so QStandardPaths resolves the same paths
+    // the AppSettings singleton will use later.
+    QCoreApplication::setApplicationName(QStringLiteral("wed"));
+    QCoreApplication::setOrganizationName(QStringLiteral("wed"));
+
+    // Chromium-level policies must be decided before WebEngine spins up.
+    if (qEnvironmentVariableIsEmpty("QTWEBENGINE_CHROMIUM_FLAGS")) {
+        QStringList flags;
+        // probe the settings INI directly (AppSettings may not exist yet)
+        const QString ini = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+                          + "/wed/settings.ini";
+        if (QFile::exists(ini)) {
+            QSettings probe(ini, QSettings::IniFormat);
+            const int webrtc = probe.value("privacy/webrtc", 1).toInt();
+            if (webrtc == 1)
+                flags << QStringLiteral("--force-webrtc-ip-handling-policy=default_public_interface_only");
+            else if (webrtc == 2)
+                flags << QStringLiteral("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+            if (!probe.value("advanced/hwAccel", true).toBool())
+                flags << QStringLiteral("--disable-gpu");
+        } else {
+            // first run: safe defaults (hide local IPs behind public interfaces)
+            flags << QStringLiteral("--force-webrtc-ip-handling-policy=default_public_interface_only");
+        }
+        if (!flags.isEmpty())
+            qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags.join(QLatin1Char(' ')).toUtf8());
+    }
+
     // Chromium sandbox cannot run in rootless containers without user namespaces;
     // we run as a normal user normally — keep default behavior unless overridden.
 #ifdef Q_OS_LINUX
-    if (qEnvironmentVariableIsEmpty("QTWEBENGINE_CHROMIUM_FLAGS") && ::getuid() == 0)
-        qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox");
+    if (qEnvironmentVariableIsEmpty("QTWEBENGINE_DISABLE_SANDBOX") && ::getuid() == 0)
+        qputenv("QTWEBENGINE_DISABLE_SANDBOX", "1");
 #endif
 
     QApplication app(argc, argv);

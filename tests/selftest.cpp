@@ -13,6 +13,9 @@
 #include <QFile>
 #include <QTimer>
 #include <QWidget>
+#include <QLibraryInfo>
+#include <QTableWidget>
+#include <QTabWidget>
 
 #include "MainWindow.h"
 #include "AddressBar.h"
@@ -30,6 +33,7 @@
 #include "TabWidget.h"
 #include "ThemeManager.h"
 #include "Utils.h"
+#include "WebView.h"
 
 #include <cstdio>
 
@@ -85,10 +89,9 @@ int main(int argc, char *argv[])
     w->resize(1280, 860);
     w->show();
 
-    const QElapsedTimer elapsed;
+    QElapsedTimer elapsed;
     elapsed.start();
 
-    QUrl local = QUrl::fromUserInput(QDir(QLibraryInfo::path(QLibraryInfo::PrefixPath)).filePath("."));
     const QString pagesDir = QCoreApplication::applicationDirPath() + "/../tests/pages";
     const QUrl testPage = QUrl::fromLocalFile(QDir(pagesDir).absoluteFilePath("index.html"));
 
