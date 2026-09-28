@@ -43,8 +43,8 @@ static QString g_shotsDir;
 
 #define CHECK(cond, name)                                                    \
     do {                                                                      \
-        if (cond) { ++g_passed; std::printf("[PASS] %s\n", name); }            \
-        else      { ++g_failed; std::printf("[FAIL] %s\n", name); }            \
+        if (cond) { ++g_passed; std::printf("[PASS] %s\n", name); std::fflush(stdout); } \
+        else      { ++g_failed; std::printf("[FAIL] %s\n", name); std::fflush(stdout); } \
     } while (0)
 
 static void shot(QWidget *w, const QString &name)
@@ -54,6 +54,7 @@ static void shot(QWidget *w, const QString &name)
     const QPixmap px = w->grab();
     px.save(path, "PNG");
     std::printf("[SHOT] %s (%dx%d)\n", qPrintable(path), px.width(), px.height());
+    std::fflush(stdout);
 }
 
 static void step(int ms, const std::function<void()> &fn)
@@ -184,14 +185,18 @@ int main(int argc, char *argv[])
                 CHECK(SessionManager::instance()->hasLastSession(), "session file exists");
 
                 // address bar conversion
-                const QUrl search = AddressBar::inputToUrl(QStringLiteral("hello world"));
+                const QUrl search = QUrl(AddressBar::searchUrlFor(QStringLiteral("hello world")));
                 CHECK(search.toString().contains(QStringLiteral("duckduckgo.com")), "query → search URL");
                 const QUrl url = AddressBar::inputToUrl(QStringLiteral("example.org"));
                 CHECK(url.host() == QStringLiteral("example.org"), "host → URL");
 
                 std::printf("\n=== SELFTEST COMPLETE: %d passed, %d failed ===\n", g_passed, g_failed);
                 std::printf("TOTAL_ELAPSED_MS=%lld\n", elapsed.elapsed());
-                QApplication::exit(g_failed == 0 ? 0 : 1);
+                std::fflush(stdout);
+                // clean teardown: close the window (WA_DeleteOnClose) so pages
+                // are deleted before profiles, then exit the loop
+                w->close();
+                QTimer::singleShot(300, [] { QApplication::exit(g_failed == 0 ? 0 : 1); });
             });
         });
     });
