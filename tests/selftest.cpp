@@ -100,7 +100,11 @@ int main(int argc, char *argv[])
     elapsed.start();
 
     const QString pagesDir = QCoreApplication::applicationDirPath() + "/../tests/pages";
-    const QUrl testPage = QUrl::fromLocalFile(QDir(pagesDir).absoluteFilePath("index.html"));
+    QUrl testPage = QUrl::fromLocalFile(QDir(pagesDir).absoluteFilePath("index.html"));
+    // WED_TEST_URL overrides the local test page (real-web verification runs)
+    const QString envUrl = qEnvironmentVariable("WED_TEST_URL");
+    if (!envUrl.isEmpty())
+        testPage = QUrl::fromUserInput(envUrl);
 
     // ---------------- step 0: start page ----------------
     step(1200, [&] {
@@ -137,11 +141,22 @@ int main(int argc, char *argv[])
               "shield exception cleared");
 
         w->navigateCurrent(testPage);
-        step(2500, [&] {
+        const int loadWait = qEnvironmentVariableIntValue("WED_TEST_WAIT") > 0
+                             ? qEnvironmentVariableIntValue("WED_TEST_WAIT") : 2500;
+        step(loadWait, [&] {
             // ---------------- step 1: web page ----------------
             shot(w, QStringLiteral("02-webpage"));
             CHECK(!w->currentTab()->isStartPage(), "navigation left start page");
-            CHECK(w->currentTab()->title().contains(QStringLiteral("Selftest")), "page title parsed");
+            CHECK(!w->currentTab()->title().isEmpty(), "page title parsed");
+            std::printf("[INFO] page title: %s\n", qPrintable(w->currentTab()->title()));
+            std::printf("[INFO] ads blocked on page: %d, trackers: %d\n",
+                        w->currentTab()->pageAdsBlocked(), w->currentTab()->pageTrackersBlocked());
+            // dump DOM length for render debugging on real pages
+            w->currentTab()->page()->toHtml([](const QString &html) {
+                std::printf("[INFO] DOM bytes: %lld\n", (long long)html.toUtf8().size());
+                std::fflush(stdout);
+            });
+            std::fflush(stdout);
 
             // ---------------- step 2: tabs ----------------
             auto *tw = w->tabWidget();
