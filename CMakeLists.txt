@@ -103,6 +103,11 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(wed PRIVATE dl pthread m ${CMAKE_SYSROOT_EGL})
 endif()
 
+if(WIN32)
+  # Rust std (file IO on windows) references ntdll symbols
+  target_link_libraries(wed PRIVATE ntdll)
+endif()
+
 target_include_directories(wed PRIVATE src src/app src/ui src/web src/privacy)
 
 # ------------------------------------------------------------------ self-test harness
@@ -120,6 +125,9 @@ if(WED_BUILD_TESTS)
   target_include_directories(wed-selftest PRIVATE src src/app src/ui src/web src/privacy)
   if(UNIX AND NOT APPLE)
     target_link_libraries(wed-selftest PRIVATE dl pthread m ${CMAKE_SYSROOT_EGL})
+  endif()
+  if(WIN32)
+    target_link_libraries(wed-selftest PRIVATE ntdll)
   endif()
 endif()
 
