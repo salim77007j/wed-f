@@ -46,7 +46,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt-arch }}
-          modules: qtwebengine qtpdf
+          modules: qtwebengine qtpdf qtwebchannel qtpositioning
           cache: true
 
       # ---------------- Linux deps ----------------
