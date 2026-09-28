@@ -41,6 +41,25 @@ static char *read_file(const char *path) {
     return NULL;
 }
 
+static gboolean dump_layout(gpointer ud) {
+    WedBrowser *b = ud;
+    struct { const char *name; GtkWidget *w; } items[] = {
+        {"back", b->btn_back}, {"fwd", b->btn_fwd}, {"reload", b->btn_reload},
+        {"home", b->btn_home}, {"shield", b->btn_shield}, {"omnibox", b->omnibox},
+        {"downloads", b->btn_downloads}, {"menu", b->btn_menu},
+    };
+    for (unsigned i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
+        if (!items[i].w) continue;
+        GtkAllocation al;
+        gtk_widget_get_allocation(items[i].w, &al);
+        gint x = 0, y = 0;
+        gtk_widget_translate_coordinates(items[i].w, b->window, 0, 0, &x, &y);
+        g_print("LAYOUT %-10s x=%d y=%d w=%d h=%d center=(%d,%d)\n",
+                items[i].name, al.x, al.y, al.width, al.height, x + al.width / 2, y + al.height / 2);
+    }
+    return G_SOURCE_REMOVE;
+}
+
 static gboolean on_delete_at_exit(GtkWidget *w, GdkEvent *e, gpointer ud) {
     (void)w; (void)e; (void)ud;
     gtk_main_quit();
@@ -143,6 +162,10 @@ int main(int argc, char **argv) {
     /* create the window (views use ctx + compiled filter) */
     WedBrowser *b = browser_new(ctx, NULL, argc > 1 ? argv[1] : NULL, FALSE);
     b->data_manager = dm;
+
+    if (g_getenv("WED_DEBUG_LAYOUT")) {
+        g_timeout_add(3000, (GSourceFunc)dump_layout, b);
+    }
 
     gtk_main();
 

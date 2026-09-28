@@ -177,7 +177,8 @@ void menu_popup_app_menu(WedBrowser *b, GdkEventButton *ev) {
     gtk_container_add(GTK_CONTAINER(menu), menu_item("Quit", G_CALLBACK(mi_quit), b));
 
     gtk_widget_show_all(menu);
-    gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)ev);
+    gtk_menu_popup_at_widget(GTK_MENU(menu), b->btn_menu,
+        GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_EAST, (GdkEvent *)ev);
 }
 
 void menu_popup_tab_menu(WedBrowser *b, int tab_index, GdkEventButton *ev) {

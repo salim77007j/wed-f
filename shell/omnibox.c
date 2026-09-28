@@ -86,8 +86,10 @@ typedef struct {
 
 static void sugg_free(Sugg *s) { g_free(s->title); g_free(s->url); g_free(s->kind); g_free(s); }
 
-static void on_sugg_activate(GtkWidget *row, WedBrowser *b) {
-    Sugg *s = g_object_get_data(G_OBJECT(row), "sugg");
+static void on_sugg_activate(GtkWidget *ev, GdkEventButton *eb, WedBrowser *b) {
+    (void)eb;
+    GtkWidget *row = g_object_get_data(G_OBJECT(ev), "sugg-row");
+    Sugg *s = row ? g_object_get_data(G_OBJECT(row), "sugg") : NULL;
     if (!s) return;
     if (!strcmp(s->kind, "search")) {
         char *u = search_url_for(s->title);
@@ -122,11 +124,12 @@ static GtkWidget *sugg_row_new(WedBrowser *b, Sugg *s) {
     gtk_box_pack_start(GTK_BOX(row), img, FALSE, FALSE, 2);
     gtk_box_pack_start(GTK_BOX(row), vbox, TRUE, TRUE, 0);
 
-    gtk_widget_set_events(row, GDK_BUTTON_PRESS_MASK);
     g_object_set_data_full(G_OBJECT(row), "sugg", s, (GDestroyNotify)sugg_free);
-    g_signal_connect(row, "button-press-event", G_CALLBACK(on_sugg_activate), b);
     GtkWidget *ev = gtk_event_box_new();
+    gtk_widget_set_events(ev, GDK_BUTTON_PRESS_MASK);
     gtk_container_add(GTK_CONTAINER(ev), row);
+    g_object_set_data(G_OBJECT(ev), "sugg-row", row);
+    g_signal_connect(ev, "button-press-event", G_CALLBACK(on_sugg_activate), b);
     return ev;
 }
 
@@ -166,14 +169,14 @@ static void suggestions_rebuild(WedBrowser *b, const char *text) {
         if (u) {
             Sugg *s = g_new0(Sugg, 1);
             s->kind = g_strdup("history");
-            s->title = ti && *ti ? ti : u;
-            s->url = u;
+            s->title = g_strdup(ti && *ti ? ti : u);
+            s->url = g_strdup(u);
             GtkWidget *r = sugg_row_new(b, s);
             gtk_container_add(GTK_CONTAINER(b->sugg_list), r);
             g_ptr_array_add(rows, r);
             seen_hist = TRUE;
-        } else g_free(u);
-        g_free(ti);
+        }
+        g_free(u); g_free(ti);
     }
     free(hj);
     (void)seen_hist; (void)seen_bm;
@@ -198,14 +201,20 @@ static void suggestions_rebuild(WedBrowser *b, const char *text) {
 }
 
 /* ---------------------------------------------------------------- entry events */
+static void omnibox_restore(WedBrowser *b);
 static gboolean on_entry_key(GtkWidget *e, GdkEventKey *ev, WedBrowser *b) {
     if (ev->keyval == GDK_KEY_Return || ev->keyval == GDK_KEY_KP_Enter) {
         omnibox_navigate(b, gtk_entry_get_text(GTK_ENTRY(e)));
         return TRUE;
     }
     if (ev->keyval == GDK_KEY_Escape) {
-        omnibox_update(b);
-        gtk_widget_grab_focus(GTK_WIDGET(gtk_bin_get_child(GTK_BIN(b->omnibox))));
+        if (b->sugg_popover && gtk_widget_is_visible(b->sugg_popover))
+            gtk_widget_hide(b->sugg_popover);
+        WedTab *t = browser_active_tab(b);
+        if (t) {
+            gtk_widget_grab_focus(t->webview ? t->webview : b->window);
+        }
+        omnibox_restore(b);
     }
     return FALSE;
 }
@@ -220,9 +229,10 @@ static void on_entry_changed(GtkWidget *e, WedBrowser *b) {
 
 static gboolean on_entry_focus_out(GtkWidget *e, GdkEventFocus *ev, WedBrowser *b) {
     (void)e; (void)ev;
+    /* hide suggestions shortly; do NOT rewrite the entry here — a transient
+       focus-out during typing must never corrupt what the user typed */
     if (b->sugg_popover && gtk_widget_is_visible(b->sugg_popover))
         g_timeout_add(150, (GSourceFunc)gtk_widget_hide, b->sugg_popover);
-    omnibox_update(b);
     return FALSE;
 }
 
@@ -284,6 +294,7 @@ GtkWidget *omnibox_new(WedBrowser *b) {
     b->sugg_rows = g_ptr_array_new();
     b->sugg_popover = gtk_popover_new(omni.win);
     gtk_popover_set_position(GTK_POPOVER(b->sugg_popover), GTK_POS_BOTTOM);
+    gtk_popover_set_modal(GTK_POPOVER(b->sugg_popover), FALSE);
     GtkWidget *sbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     b->sugg_list = sbox;
     gtk_container_set_border_width(GTK_CONTAINER(sbox), 4);
@@ -295,10 +306,20 @@ GtkWidget *omnibox_new(WedBrowser *b) {
     return omni.win;
 }
 
+static void omnibox_restore(WedBrowser *b) {
+    WedTab *t = browser_active_tab(b);
+    if (!t) return;
+    const char *uri = t->url ? t->url : "";
+    gtk_entry_set_text(GTK_ENTRY(omni.entry),
+        g_str_has_prefix(uri, "wed://start") ? "" : uri);
+}
+
 void omnibox_update(WedBrowser *b) {
     WedTab *t = browser_active_tab(b);
     if (!t) return;
-    if (gtk_widget_has_focus(omni.entry)) return;
+    if (gtk_widget_has_focus(omni.entry)) { g_print("DBG omnibox_update SKIPPED (focus)\n"); return; }
+    if (b->sugg_popover && gtk_widget_is_visible(b->sugg_popover)) { g_print("DBG omnibox_update SKIPPED (popover)\n"); return; }
+    g_print("DBG omnibox_update WROTE '%s'\n", t->url ? t->url : "");
     const char *uri = t->url ? t->url : "";
     gtk_entry_set_text(GTK_ENTRY(omni.entry),
         g_str_has_prefix(uri, "wed://start") ? "" : uri);
@@ -313,6 +334,4 @@ void omnibox_update(WedBrowser *b) {
 void omnibox_focus(WedBrowser *b) {
     gtk_widget_grab_focus(omni.entry);
     gtk_editable_select_region(GTK_EDITABLE(omni.entry), 0, -1);
-    gtk_widget_show_all(b->sugg_popover);
-    gtk_widget_hide(b->sugg_popover);
 }

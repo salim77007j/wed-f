@@ -192,8 +192,7 @@ void downloads_init(WedBrowser *b) {
 }
 
 GtkWidget *downloads_popover_new(WedBrowser *b) {
-    GtkWidget *pop = gtk_popover_new(b->btn_downloads ? NULL : NULL);
-    /* attach to the downloads button once toolbar exists */
+    GtkWidget *pop = gtk_popover_new(b->btn_downloads);
     b->downloads_popover = pop;
     gtk_popover_set_position(GTK_POPOVER(pop), GTK_POS_BOTTOM);
     gtk_widget_set_size_request(pop, 420, 360);

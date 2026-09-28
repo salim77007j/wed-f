@@ -53,10 +53,11 @@ char *json_array_str(const char *json, int k, const char *key) {
     if (!obj) return NULL;
     char *pat = g_strdup_printf("\"%s\":", key);
     const char *f = strstr(obj, pat);
+    size_t patlen = strlen(pat);
     g_free(pat);
     if (!f) return NULL;
-    const char *p = f;
-    while (*p && *p != ':' && *p != '"') p++;
+    /* f points at the opening quote of "key": — skip the whole token */
+    const char *p = f + patlen;
     while (*p == ' ' || *p == ':') p++;
     if (*p != '"') return NULL;
     p++;
@@ -99,11 +100,12 @@ double json_array_num(const char *json, int k, const char *key) {
         if (!obj) return 0;
         char *pat = g_strdup_printf("\"%s\":", key);
         const char *f = strstr(obj, pat);
+        if (!f) { g_free(pat); return 0; }
+        const char *p = f + strlen(pat);
         g_free(pat);
-        if (!f) return 0;
-        const char *p = f;
-        while (*p && *p != ':' && *p != '"') p++;
         while (*p == ' ' || *p == ':') p++;
+        if (!strncmp(p, "true", 4)) return 1;
+        if (!strncmp(p, "false", 5)) return 0;
         return g_ascii_strtod(p, NULL);
     }
     double v = g_ascii_strtod(s, NULL);
@@ -154,8 +156,8 @@ static void really_close_tab(WedBrowser *b, int index) {
     if (index < 0 || index >= (int)b->tabs->len) return;
     WedTab *t = g_ptr_array_index(b->tabs, index);
     gtk_container_remove(GTK_CONTAINER(b->content_stack), t->box);
+    /* GPtrArray owns tabs via free_func — removal frees the WedTab */
     g_ptr_array_remove_index(b->tabs, index);
-    tab_free(t);
     if (b->active >= (int)b->tabs->len) b->active = b->tabs->len - 1;
     if (b->tabs->len == 0) {
         if (b->closing_all) return;
@@ -197,6 +199,8 @@ void browser_switch_tab(WedBrowser *b, int index) {
     if (index < 0 || index >= (int)b->tabs->len) return;
     b->active = index;
     WedTab *t = g_ptr_array_index(b->tabs, index);
+    /* take focus off the omnibox so URL display refreshes */
+    if (t->webview) gtk_widget_grab_focus(t->webview);
     gtk_stack_set_visible_child(GTK_STACK(b->content_stack), t->box);
     t->last_active = now_sec();
     browser_update_nav(b);
@@ -243,9 +247,13 @@ void browser_update_tab_ui(WedBrowser *b) {
 void browser_update_shield_ui(WedBrowser *b) {
     unsigned long ads = 0, tr = 0, pages = 0, bytes = 0;
     wed_stats(&ads, &tr, &pages, &bytes);
-    char *lbl = g_strdup_printf("%luk", (ads + tr) / 1000);
-    gtk_label_set_text(GTK_LABEL(b->shield_count_lbl),
-        (ads + tr) > 0 ? lbl : "");
+    unsigned long total = ads + tr;
+    char *lbl;
+    if (total >= 10000) lbl = g_strdup_printf("%luk", total / 1000);
+    else if (total > 0) lbl = g_strdup_printf("%lu", total);
+    else lbl = g_strdup("");
+    if (b->shield_count_lbl)
+        gtk_label_set_text(GTK_LABEL(b->shield_count_lbl), lbl);
     g_free(lbl);
     WedTab *t = browser_active_tab(b);
     gboolean on = TRUE;
@@ -660,7 +668,9 @@ WedBrowser *browser_new(WebKitWebContext *ctx, WebKitUserContentFilter *filter,
     g_signal_connect(b->window, "key-press-event", G_CALLBACK(on_key), b);
 
     gtk_widget_show_all(b->window);
-    gtk_widget_hide(b->panel_revealer);
+    /* the panel revealer stays mapped with reveal_child=FALSE (zero width);
+       hiding it would prevent the reveal from ever mapping it */
+    gtk_revealer_set_reveal_child(GTK_REVEALER(b->panel_revealer), FALSE);
     gtk_widget_hide(b->findbar);
     if (b->sugg_popover) gtk_widget_hide(b->sugg_popover);
     if (b->downloads_popover) gtk_widget_hide(b->downloads_popover);

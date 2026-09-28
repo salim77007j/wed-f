@@ -68,18 +68,33 @@ fn record_stat(url: &str, is_ad: bool) {
 
 fn serve(mut client: TcpStream) -> std::io::Result<()> {
     client.set_nodelay(true).ok();
-    let mut buf = [0u8; 8192];
-    let n = client.read(&mut buf)?;
-    if n == 0 {
-        return Ok(());
+    /* Read until the full request head (\r\n\r\n) arrives — the request
+       may be split across TCP segments. Leftover bytes after the head
+       (pipelined TLS ClientHello, request bodies) are forwarded onward. */
+    let mut acc: Vec<u8> = Vec::with_capacity(8192);
+    let mut buf = [0u8; 16384];
+    let head_end;
+    loop {
+        let n = client.read(&mut buf)?;
+        if n == 0 {
+            return Ok(());
+        }
+        acc.extend_from_slice(&buf[..n]);
+        if let Some(i) = find_head_end(&acc) {
+            head_end = i;
+            break;
+        }
+        if acc.len() > 65536 {
+            return Ok(());   /* runaway; drop */
+        }
     }
-    let head = String::from_utf8_lossy(&buf[..n]);
+    let head = String::from_utf8_lossy(&acc[..head_end]).into_owned();
     let first_line = head.lines().next().unwrap_or("").to_string();
+    let leftover: Vec<u8> = acc[head_end..].to_vec();
 
     if let Some(rest) = first_line.strip_prefix("CONNECT ") {
-        // rest is "host:port HTTP/1.1"
         let hostport = rest.split_whitespace().next().unwrap_or(rest).to_string();
-        return handle_connect(client, &hostport, &buf[n.min(n)..n]);
+        return handle_connect(client, &hostport, &leftover);
     }
 
     if first_line.starts_with("GET ") || first_line.starts_with("POST ")
@@ -87,13 +102,28 @@ fn serve(mut client: TcpStream) -> std::io::Result<()> {
         || first_line.starts_with("DELETE ") || first_line.starts_with("OPTIONS ")
         || first_line.starts_with("PATCH ")
     {
-        return handle_plain(client, &first_line, head.to_string(), &buf[..n]);
+        return handle_plain(client, &first_line, head.clone(), &acc);
     }
     Ok(())
 }
 
+/// Index just past the request head terminator (\r\n\r\n or \n\n).
+fn find_head_end(data: &[u8]) -> Option<usize> {
+    if data.len() >= 4 {
+        if let Some(i) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+            return Some(i + 4);
+        }
+    }
+    if data.len() >= 2 {
+        if let Some(i) = data.windows(2).position(|w| w == b"\n\n") {
+            return Some(i + 2);
+        }
+    }
+    None
+}
+
 /// CONNECT host:port — check host, then tunnel.
-fn handle_connect(mut client: TcpStream, hostport: &str, _extra: &[u8]) -> std::io::Result<()> {
+fn handle_connect(mut client: TcpStream, hostport: &str, leftover: &[u8]) -> std::io::Result<()> {
     // hostport is "host:port"; build a check URL with just the host
     let host = hostport.split(':').next().unwrap_or(hostport);
     let url = format!("https://{host}/");
@@ -104,6 +134,10 @@ fn handle_connect(mut client: TcpStream, hostport: &str, _extra: &[u8]) -> std::
     }
     let mut remote = connect_host(hostport)?;
     let _ = client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n");
+    /* pipelined bytes (e.g. TLS ClientHello) must reach the origin first */
+    if !leftover.is_empty() {
+        remote.write_all(leftover)?;
+    }
     tunnel(client, remote)
 }
 
