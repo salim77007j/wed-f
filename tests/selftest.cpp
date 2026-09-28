@@ -79,8 +79,14 @@ int main(int argc, char *argv[])
     QDir().mkpath(g_shotsDir);
 
     // ---- services (same boot sequence as main.cpp) ----
+    // isolate database + settings from any real user data
+    const QString isoRoot = QDir::tempPath() + "/wed-selftest-data";
+    QDir(isoRoot).removeRecursively();
+    QDir().mkpath(isoRoot);
+    Database::instance(isoRoot + "/wed.db");
+    qputenv("XDG_CONFIG_HOME", (isoRoot + "/config").toUtf8());
+    qputenv("XDG_DATA_HOME", (isoRoot + "/share").toUtf8());
     AppSettings::instance();
-    Database::instance();
     ThemeManager::instance()->apply();
     ProfileCatalog::instance()->attachAll();
     PrivacyEngine::instance()->start();
