@@ -1,0 +1,19 @@
+[package]
+name = "wed_core"
+version = "2.0.0"
+edition = "2021"
+description = "WED browser product core: filtering, data layer, policy, efficiency governor"
+license = "MIT"
+
+[lib]
+name = "wed_core"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "unwind"
