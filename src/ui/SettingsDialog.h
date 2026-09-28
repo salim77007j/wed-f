@@ -9,6 +9,23 @@ class QLineEdit;
 class QTableWidget;
 class QButtonGroup;
 
+// Clear-browsing-data dialog (also used from the Tools menu): real deletions
+// for history, cookies, cache, site stats and closed-tabs list.
+class ClearBrowsingDataDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit ClearBrowsingDataDialog(QWidget *parent = nullptr);
+private slots:
+    void onClear();
+private:
+    QCheckBox *m_history = nullptr;
+    QCheckBox *m_cookies = nullptr;
+    QCheckBox *m_cache = nullptr;
+    QCheckBox *m_stats = nullptr;
+    QCheckBox *m_closedTabs = nullptr;
+};
+
 // Deep settings dialog. Pages: General, Appearance, Search, Privacy & Security,
 // Site Permissions, Advanced. All controls read/write AppSettings and apply live.
 class SettingsDialog : public QDialog

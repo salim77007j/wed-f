@@ -1,0 +1,146 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.8.3'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-24.04
+            qt-arch: linux_gcc_64
+          - name: windows-x64
+            os: windows-latest
+            qt-arch: win64_msvc2022_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/core
+          prefix-key: rust-${{ matrix.name }}
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt-arch }}
+          modules: qtwebengine
+          cache: true
+
+      # ---------------- Linux deps ----------------
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libxkbcommon0 \
+            libnss3 libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxcomposite1 libxdamage1 libxfixes3 \
+            libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libx11-xcb1 \
+            libegl1 libgl1 fonts-liberation fonts-noto-core
+
+      # ---------------- Build ----------------
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=$Qt6_DIR/lib/cmake
+        env:
+          QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:QT6_DIR/lib/cmake"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # ---------------- Selftest (Linux, real UI + screenshots) ----------------
+      - name: Run selftest under xvfb
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p shots
+          xvfb-run -a -s "-screen 0 1280x900x24" \
+            env QTWEBENGINE_DISABLE_SANDBOX=1 WED_PROFILE=$HOME/.wed-test-profile \
+            ./build/wed-selftest "$PWD/shots" || true
+          ls -la shots/ || true
+        timeout-minutes: 12
+
+      - name: Upload screenshots
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wed-${{ matrix.name }}-selftest-screenshots
+          path: shots/
+          if-no-files-found: warn
+
+      # ---------------- Package ----------------
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pkg = "package"
+          New-Item -ItemType Directory -Force -Path $pkg
+          Copy-Item "build/Release/wed-browser.exe" $pkg
+          Copy-Item "build/tests/Release/wed-selftest.exe" $pkg -ErrorAction SilentlyContinue
+          windeployqt --release --no-translations --compiler-runtime "$pkg/wed-browser.exe"
+          Copy-Item "src/resources/lists" -Recurse "$pkg/lists_backup" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$pkg/*" -DestinationPath "wed-windows-x64.zip" -Force
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/package-linux.sh build/wed-browser build/wed-selftest
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wed-${{ matrix.name }}
+          path: |
+            wed-windows-x64.zip
+            wed-linux-x64.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wed-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wed-windows-x64.zip
+            wed-linux-x64.tar.gz

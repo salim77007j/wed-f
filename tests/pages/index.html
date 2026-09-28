@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WED Selftest Page</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #222; }
+  h1 { color: #0fa2a0; border-bottom: 2px solid #0fa2a0; padding-bottom: 8px; }
+  .card { background: #f5f7f7; border-radius: 10px; padding: 16px 20px; margin: 16px 0; }
+  code { background: #eef2f2; padding: 2px 6px; border-radius: 4px; }
+  a { color: #0b7a78; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  canvas { border: 1px solid #999; }
+</style>
+</head>
+<body>
+<h1>WED Browser Selftest Page</h1>
+<p class="card">This local page verifies: rendering, title parsing, link following, in-page find,
+zoom behavior, canvas API (fingerprint script must not break it), and download triggering.</p>
+
+<div class="grid">
+  <div class="card">
+    <b>Find target</b>
+    <p>The quick brown fox jumps over the lazy dog near the riverbank at dawn.
+       Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump!</p>
+  </div>
+  <div class="card">
+    <b>Links</b>
+    <ul>
+      <li><a href="second.html">Second page (navigation test)</a></li>
+      <li><a href="index.html" download="wed-selftest-download.html">Download this page</a></li>
+      <li><a href="https://example.org/">External link (https)</a></li>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <b>Table</b>
+  <table>
+    <tr><th>Feature</th><th>Status</th></tr>
+    <tr><td>Network ad-blocking</td><td>Rust core (wed_core)</td></tr>
+    <tr><td>Cosmetic filtering</td><td>Selector injection</td></tr>
+    <tr><td>Fingerprint protection</td><td>Canvas / Audio / WebGL</td></tr>
+    <tr><td>Cookie policy</td><td>Third-party block</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <b>Canvas probe</b> (fingerprint script must keep this functional)
+  <canvas id="c" width="240" height="80"></canvas>
+  <script>
+    (function () {
+      var c = document.getElementById('c');
+      var g = c.getContext('2d');
+      g.fillStyle = '#0fa2a0';
+      g.fillRect(8, 8, 224, 64);
+      g.fillStyle = '#fff';
+      g.font = '20px sans-serif';
+      g.fillText('WED canvas OK', 28, 48);
+    })();
+  </script>
+</div>
+
+<form class="card" onsubmit="return false">
+  <b>Form controls</b><br>
+  <input placeholder="text input" size="30"> <input type="checkbox" checked> checkbox
+  <button type="button" onclick="this.textContent='clicked'">Button</button>
+</form>
+</body>
+</html>

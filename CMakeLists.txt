@@ -39,13 +39,10 @@ add_custom_target(
 qt_add_resources(wed_res "wed"
   PREFIX "/"
   FILES
-    src/resources/themes/light.qss
-    src/resources/themes/dark.qss
     src/resources/js/fingerprint.js
-    src/resources/js/cosmetic.js
     src/resources/lists/easylist.txt
     src/resources/lists/easyprivacy.txt
-    src/resources/pages/offline-start.html
+    src/resources/icons/app.png
 )
 
 # ------------------------------------------------------------------ Executable
@@ -60,6 +57,7 @@ set(WED_SOURCES
   src/web/WebPage.cpp
   src/web/WebView.cpp
   src/web/DownloadManager.cpp
+  src/web/ProfileCatalog.cpp
   src/ui/MainWindow.cpp
   src/ui/TabWidget.cpp
   src/ui/BrowserTab.cpp
@@ -73,9 +71,10 @@ set(WED_SOURCES
 )
 
 add_executable(wed WIN32 ${WED_SOURCES} src/app/AppSettings.h src/app/Database.h
-  src/app/SessionManager.h src/app/ThemeManager.h src/privacy/PrivacyEngine.h
-  src/privacy/RequestInterceptor.h src/web/WebPage.h src/web/WebView.h
-  src/web/DownloadManager.h src/ui/MainWindow.h src/ui/TabWidget.h
+  src/app/SessionManager.h src/app/ThemeManager.h src/app/Utils.h
+  src/privacy/PrivacyEngine.h src/privacy/RequestInterceptor.h
+  src/web/WebPage.h src/web/WebView.h src/web/DownloadManager.h
+  src/web/ProfileCatalog.h src/ui/MainWindow.h src/ui/TabWidget.h
   src/ui/BrowserTab.h src/ui/AddressBar.h src/ui/Toolbar.h src/ui/StartPage.h
   src/ui/Panels.h src/ui/SettingsDialog.h src/ui/PrivacyDashboard.h
   src/ui/FindBar.h)
@@ -92,15 +91,15 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(wed PRIVATE dl pthread m)
 endif()
 
-target_include_directories(wed PRIVATE src)
+target_include_directories(wed PRIVATE src src/app src/ui src/web src/privacy)
 
 # Self-test harness drives the real browser headlessly (screenshots, scripted runs)
 if(WED_BUILD_TESTS)
   add_executable(wed-selftest tests/selftest.cpp)
   target_link_libraries(wed-selftest PRIVATE
-    Qt6::Widgets Qt6::WebEngineWidgets Qt6::Sql Qt6::Network ${WED_RUST_LIB})
+    Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebEngineCore Qt6::Sql Qt6::Network ${WED_RUST_LIB})
   add_dependencies(wed-selftest wed_rust)
-  target_include_directories(wed-selftest PRIVATE src)
+  target_include_directories(wed-selftest PRIVATE src src/app src/ui src/web src/privacy)
 endif()
 
 install(TARGETS wed RUNTIME DESTINATION bin)

@@ -477,6 +477,11 @@ void Database::incrementStats(const QString &host, int ads, int trackers, int co
     q.exec();
 }
 
+void Database::clearStats()
+{
+    exec("DELETE FROM site_stats");
+}
+
 QList<Database::SiteStats> Database::siteStats(int limit) const
 {
     QList<SiteStats> out;

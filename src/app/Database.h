@@ -57,6 +57,7 @@ public:
     QStringList shieldExceptions() const;
 
     // per-site privacy stats
+    void clearStats();
     void incrementStats(const QString &host, int ads, int trackers, int cookies);
     QList<SiteStats> siteStats(int limit = 50) const;
     SiteStats totals() const;

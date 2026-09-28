@@ -1,0 +1,18 @@
+# build dirs
+build*/
+package/
+shots/
+*.user
+
+# rust
+target/
+**/target/
+
+# runtime artifacts
+*.o
+*.a
+.cargo/
+
+# OS noise
+.DS_Store
+Thumbs.db
