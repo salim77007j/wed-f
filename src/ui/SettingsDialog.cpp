@@ -89,7 +89,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_tabs->addTab(buildGeneralPage(), tr("General"));
     m_tabs->addTab(buildAppearancePage(), tr("Appearance"));
     m_tabs->addTab(buildSearchPage(), tr("Search"));
-    m_tabs->addTab(buildPrivacyPage(), tr("Privacy & Security"));
+    m_tabs->addTab(buildPrivacyPage(), tr("Privacy && Security"));
     m_tabs->addTab(buildPermissionsPage(), tr("Site Permissions"));
     m_tabs->addTab(buildAdvancedPage(), tr("Advanced"));
     l->addWidget(m_tabs);

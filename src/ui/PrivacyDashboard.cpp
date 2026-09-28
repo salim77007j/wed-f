@@ -154,7 +154,7 @@ void PrivacyDashboard::refreshData()
          << tr("Do-Not-Track / GPC headers: %1 / %2")
                 .arg(s->dntHeader() ? tr("on") : tr("off"))
                 .arg(s->gpcHeader() ? tr("on") : tr("off"));
-    m_rules->setText(prot.join(QStringLiteral(" &nbsp;•&nbsp; ")));
+    m_rules->setText(prot.join(QStringLiteral("   •   ")));
 
     const bool el = s->easyListEnabled(), ep = s->easyPrivacyEnabled();
     m_lists->setText(tr("Filter lists: EasyList (%1), EasyPrivacy (%2) — %L3 active rules")

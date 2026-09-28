@@ -58,7 +58,7 @@ jobs:
             xvfb libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libxkbcommon0 \
             libnss3 libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-            libcups2t64 libdrm2 libxcomposite1 libxdamage1 libxfixes3 \
+            libcups2-dev libcups2t64 libvulkan-dev libdrm2 libxcomposite1 libxdamage1 libxfixes3 \
             libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libx11-xcb1 \
             libegl1 libgl1 fonts-liberation fonts-noto-core
 
