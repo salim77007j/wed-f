@@ -49,14 +49,21 @@ fn decide_url(url: &str) -> i32 {
         crate::filters::Decision::Block(crate::filters::Category::Tracker) => {
             core.blocked_trackers.fetch_add(1, Ordering::Relaxed);
             record_stat(url, false);
+            gstat("trackers");
             2
         }
         crate::filters::Decision::Block(_) => {
             core.blocked_ads.fetch_add(1, Ordering::Relaxed);
             record_stat(url, true);
+            gstat("ads");
             1
         }
     }
+}
+
+/* persistent lifetime counter (write-through to the DB) */
+fn gstat(key: &str) {
+    crate::Core::global().db.lock().unwrap().gstat_bump(key, 1);
 }
 
 fn record_stat(url: &str, is_ad: bool) {

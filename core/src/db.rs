@@ -281,6 +281,35 @@ impl Database {
 
     // ------------------------------------------------------------ stats
 
+    /// Persistent lifetime counters (Chrome-parity: survive restarts).
+    pub fn gstat_bump(&self, key: &str, inc: u64) {
+        self.with(|c| {
+            let _ = c.execute(
+                "CREATE TABLE IF NOT EXISTS global_stats(key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)",
+                [],
+            );
+            let _ = c.execute(
+                "INSERT INTO global_stats(key, value) VALUES(?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = value + ?2",
+                params![key, inc],
+            );
+        });
+    }
+
+    pub fn gstat_get(&self, key: &str) -> u64 {
+        self.with(|c| {
+            let _ = c.execute(
+                "CREATE TABLE IF NOT EXISTS global_stats(key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)",
+                [],
+            );
+            c.query_row(
+                "SELECT value FROM global_stats WHERE key = ?1",
+                params![key],
+                |r| r.get::<_, i64>(0),
+            ).unwrap_or(0) as u64
+        })
+    }
+
     pub fn stat_blocked(&self, blocked_host: &str, is_ad: bool) {
         self.with(|c| {
             let _ = c.execute(

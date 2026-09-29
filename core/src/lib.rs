@@ -58,6 +58,16 @@ impl Core {
     }
 }
 
+/// Bump a persistent global counter (DB-backed, write-through).
+/// Chrome-parity: lifetime totals survive restarts.
+fn gstat_bump(key: &str, inc: u64) {
+    Core::global().db.lock().unwrap().gstat_bump(key, inc);
+}
+
+fn gstat_get(key: &str) -> u64 {
+    Core::global().db.lock().unwrap().gstat_get(key)
+}
+
 /// Initialise the core with a data directory (created if missing).
 /// Returns 0 on success. Idempotent (subsequent calls re-open the DB path).
 #[no_mangle]
@@ -181,18 +191,27 @@ pub extern "C" fn wed_proxy_set_enabled(enabled: c_int) {
 #[no_mangle]
 pub extern "C" fn wed_stats(blocked_ads: *mut c_ulong, blocked_trackers: *mut c_ulong,
                             pages: *mut c_ulong, saved_bytes: *mut c_ulong) {
-    let core = Core::global();
+    /* lifetime totals: DB value (previous sessions) + this session's atomics */
     unsafe {
-        if !blocked_ads.is_null() { *blocked_ads = core.blocked_ads.load(Ordering::Relaxed); }
-        if !blocked_trackers.is_null() { *blocked_trackers = core.blocked_trackers.load(Ordering::Relaxed); }
-        if !pages.is_null() { *pages = core.pages_loaded.load(Ordering::Relaxed); }
-        if !saved_bytes.is_null() { *saved_bytes = core.saved_bytes.load(Ordering::Relaxed); }
+        if !blocked_ads.is_null() {
+            *blocked_ads = gstat_get("ads") + Core::global().blocked_ads.load(Ordering::Relaxed);
+        }
+        if !blocked_trackers.is_null() {
+            *blocked_trackers = gstat_get("trackers") + Core::global().blocked_trackers.load(Ordering::Relaxed);
+        }
+        if !pages.is_null() {
+            *pages = gstat_get("pages") + Core::global().pages_loaded.load(Ordering::Relaxed);
+        }
+        if !saved_bytes.is_null() {
+            *saved_bytes = gstat_get("bytes") + Core::global().saved_bytes.load(Ordering::Relaxed);
+        }
     }
 }
 
 #[no_mangle]
 pub extern "C" fn wed_record_page_load() {
     Core::global().pages_loaded.fetch_add(1, Ordering::Relaxed);
+    gstat_bump("pages", 1);
 }
 
 /// Per-site blocked counts for the dashboard: JSON array of
