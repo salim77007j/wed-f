@@ -1,5 +1,6 @@
-/* panels.c — side panels: History (searchable list, delete rows, clear all)
- * and Bookmarks (list, open, remove). Data via wed_core JSON. */
+/* panels.c — side panels: History (searchable, delete rows, clear all) and
+ * Bookmarks (open, remove). Chrome-style Material rows: leading icon, title +
+ * url stacked, trailing delete on hover, hairline dividers. Data via core. */
 #include "wed.h"
 
 static GtkWidget *search_entry;
@@ -17,6 +18,11 @@ static void on_open_row(GtkWidget *ev, GdkEventButton *e, gpointer ud) {
         WedBrowser *b = g_object_get_data(G_OBJECT(ev), "wed-browser");
         browser_load_url(b, r->url);
     }
+    if (e->type == GDK_BUTTON_PRESS && e->button == 2) {  /* middle-click → new tab */
+        Row *r = ud;
+        WedBrowser *b = g_object_get_data(G_OBJECT(ev), "wed-browser");
+        browser_add_tab(b, r->url);
+    }
 }
 
 static void on_remove_row(GtkWidget *btn, gpointer ud) {
@@ -26,34 +32,42 @@ static void on_remove_row(GtkWidget *btn, gpointer ud) {
     else wed_bookmark_remove(r->url);
     panel_refresh(b);
     omnibox_update(b);
+    bookmarkbar_refresh(b);
 }
 
 static GtkWidget *row_widget(WedBrowser *b, Row *r) {
     GtkWidget *ev = gtk_event_box_new();
     gtk_widget_set_events(ev, GDK_BUTTON_PRESS_MASK);
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_set_name(hbox, "panelrow");
 
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    /* leading glyph: history clock / bookmark mark (Chrome-style) */
+    GtkWidget *icon = gtk_image_new_from_pixbuf(
+        icon_get(panel_kind_static == 1 ? IC_HISTORY : IC_BOOKMARK, 15));
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
     GtkWidget *t = gtk_label_new(r->title && *r->title ? r->title : r->url);
     gtk_label_set_ellipsize(GTK_LABEL(t), PANGO_ELLIPSIZE_END);
     gtk_label_set_xalign(GTK_LABEL(t), 0.0);
-    gtk_widget_set_name(t, "paneltitle");
+    gtk_widget_set_name(t, "panelrowtitle");
     GtkWidget *u = gtk_label_new(r->url);
     gtk_label_set_ellipsize(GTK_LABEL(u), PANGO_ELLIPSIZE_END);
     gtk_label_set_xalign(GTK_LABEL(u), 0.0);
     gtk_widget_set_name(u, "panelurl");
     gtk_box_pack_start(GTK_BOX(vbox), t, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), u, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(hbox), icon, FALSE, FALSE, 2);
     gtk_box_pack_start(GTK_BOX(hbox), vbox, TRUE, TRUE, 0);
 
-    GtkWidget *del = wed_image_button(IC_TRASH, "Remove");
+    GtkWidget *del = wed_image_button(IC_CLOSE, "Remove");
     g_object_set_data(G_OBJECT(del), "wed-browser", b);
     g_signal_connect(del, "clicked", G_CALLBACK(on_remove_row), r);
-    gtk_box_pack_start(GTK_BOX(hbox), del, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hbox), del, FALSE, FALSE, 2);
 
     gtk_container_add(GTK_CONTAINER(ev), hbox);
     g_object_set_data(G_OBJECT(ev), "wed-browser", b);
+    g_object_set_data_full(G_OBJECT(ev), "row", r, (GDestroyNotify)row_free);
     g_signal_connect(ev, "button-press-event", G_CALLBACK(on_open_row), r);
     return ev;
 }
@@ -80,12 +94,17 @@ GtkWidget *panel_new(WedBrowser *b, int kind) {
     panel_kind_static = kind;
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
+    /* header: title + clear button (Chrome panel header) */
     GtkWidget *hdr = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_container_set_border_width(GTK_CONTAINER(hdr), 8);
+    gtk_widget_set_name(hdr, "panelhdr");
+    gtk_widget_set_margin_top(hdr, 10);
+    gtk_widget_set_margin_bottom(hdr, 8);
     GtkWidget *title = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(title),
         kind == 1 ? "<span size='large' weight='bold'>History</span>"
                   : "<span size='large' weight='bold'>Bookmarks</span>");
+    gtk_widget_set_name(title, "paneltitle");
+    gtk_widget_set_halign(title, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hdr), title, FALSE, FALSE, 0);
 
     if (kind == 1) {
@@ -98,8 +117,9 @@ GtkWidget *panel_new(WedBrowser *b, int kind) {
     if (kind == 1) {
         search_entry = gtk_entry_new();
         gtk_entry_set_placeholder_text(GTK_ENTRY(search_entry), "Search history");
-        gtk_widget_set_margin_start(search_entry, 8);
-        gtk_widget_set_margin_end(search_entry, 8);
+        gtk_widget_set_margin_start(search_entry, 12);
+        gtk_widget_set_margin_end(search_entry, 12);
+        gtk_widget_set_margin_bottom(search_entry, 8);
         g_signal_connect(search_entry, "changed", G_CALLBACK(on_search), b);
         gtk_box_pack_start(GTK_BOX(box), search_entry, FALSE, FALSE, 4);
     } else {
@@ -133,6 +153,18 @@ GtkWidget *panel_new(WedBrowser *b, int kind) {
         } else g_free(t);
     }
     free(json);
+
+    if (n == 0) {
+        GtkWidget *empty = gtk_label_new(kind == 1
+            ? "No history yet — pages you visit will appear here"
+            : "No bookmarks yet — press Ctrl+D to bookmark the current page");
+        gtk_widget_set_name(empty, "hint");
+        gtk_widget_set_margin_top(empty, 24);
+        gtk_label_set_line_wrap(GTK_LABEL(empty), TRUE);
+        gtk_label_set_xalign(GTK_LABEL(empty), 0.5);
+        gtk_widget_set_size_request(empty, 300, -1);
+        gtk_container_add(GTK_CONTAINER(list), empty);
+    }
 
     gtk_widget_show_all(box);
     return box;

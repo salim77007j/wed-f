@@ -8,7 +8,8 @@ WED_CFLAGS = $(CFLAGS) -std=gnu11 -Wall -Wextra -Wno-unused-parameter \
 SHELL_SRC = shell/main.c shell/browser.c shell/tabstrip.c shell/toolbar.c \
 	shell/omnibox.c shell/webview.c shell/findbar.c shell/panels.c \
 	shell/downloads.c shell/privacydash.c shell/settingsui.c \
-	shell/startpage.c shell/theme.c shell/icons.c shell/menus.c shell/ai.c
+	shell/startpage.c shell/theme.c shell/icons.c shell/menus.c shell/ai.c \
+	shell/bookmarkbar.c
 
 RUST_LIB = core/target/release/libwed_core.a
 BIN = wed-browser

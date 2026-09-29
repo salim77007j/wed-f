@@ -15,12 +15,13 @@ typedef struct {
 
 typedef struct {
     WedColor tabstrip_bg, toolbar_bg, content_bg;
-    WedColor tab_active, tab_inactive_text, tab_text;
+    WedColor tab_active, tab_hover, tab_inactive_text, tab_text;
     WedColor omnibox_fill, omnibox_fill_focused, omnibox_border, omnibox_text;
-    WedColor accent, accent_dark, danger;
-    WedColor text_primary, text_secondary, divider, hover;
+    WedColor accent, accent_dark, danger, success;
+    WedColor text_primary, text_secondary, text_hint, divider, hover;
+    WedColor select_fill, select_text;
     WedColor menu_bg, menu_border, menu_hover, menu_text;
-    WedColor panel_bg, card_bg, entry_border;
+    WedColor panel_bg, card_bg, field_bg, entry_border;
     gboolean dark;
 } WedTheme;
 
@@ -34,7 +35,14 @@ typedef enum {
     IC_BACK, IC_FORWARD, IC_RELOAD, IC_HOME, IC_SHIELD, IC_SHIELD_OFF,
     IC_STAR, IC_STAR_FILLED, IC_DOWNLOAD, IC_MENU, IC_CLOSE, IC_SEARCH,
     IC_GEAR, IC_HISTORY, IC_BOOKMARK, IC_PLUS, IC_VOLUME, IC_VOLUME_MUTED,
-    IC_INFO, IC_LOCK, IC_TRASH, IC_AI, IC_TAB, IC_EXTERNAL, IC_COUNT
+    IC_INFO, IC_LOCK, IC_TRASH, IC_AI, IC_TAB, IC_EXTERNAL,
+    /* Material set for settings/sidebar/startpage */
+    IC_PERSON, IC_KEY, IC_PALETTE, IC_GLOBE, IC_LAPTOP, IC_GAUGE,
+    IC_LANGUAGE, IC_ACCESS, IC_COMPUTER, IC_RESET, IC_CHEVRON,
+    IC_MIC, IC_CAMERA, IC_APPS, IC_SUN, IC_CLOUDSUN, IC_MOON, IC_COOKIE,
+    IC_FINGERPRINT, IC_EYE, IC_FOLDER, IC_PIN, IC_COPY, IC_SHARE,
+    IC_WINDOW, IC_ZOOMIN, IC_ZOOMOUT, IC_PRINT, IC_CAST, IC_FULLSCR,
+    IC_NOTIF, IC_EXT, IC_INCognito, IC_HELP, IC_COUNT
 } WedIcon;
 
 void    icons_init(void);
@@ -53,6 +61,7 @@ struct _WedBrowser {
     GtkWidget *vbox;
     GtkWidget *tabstrip;
     GtkWidget *toolbar;
+    GtkWidget *bookmarkbar;
     GtkWidget *content_stack;
     GtkWidget *overlay;
     GtkWidget *findbar;
@@ -152,6 +161,10 @@ void findbar_search(WedBrowser *b, const char *text, gboolean forward);
 GtkWidget *panel_new(WedBrowser *b, int kind);   /* 1 history 2 bookmarks */
 void panel_refresh(WedBrowser *b);
 
+/* bookmarkbar.c */
+GtkWidget *bookmarkbar_new(WedBrowser *b);
+void bookmarkbar_refresh(WedBrowser *b);
+
 /* downloads.c */
 void downloads_init(WedBrowser *b);
 GtkWidget *downloads_popover_new(WedBrowser *b);
@@ -167,6 +180,11 @@ void settings_window_open(WedBrowser *b);
 
 /* startpage.c */
 void startpage_register_scheme(WebKitWebContext *ctx);
+void startpage_weather_start(void);
+
+/* browser.c — cross-module JS injection into live start-page tabs */
+extern WedBrowser *wed_main_browser;
+void browser_inject_js(const char *js);
 
 /* webview.c */
 GtkWidget *webview_new(WedBrowser *b, WedTab *t, const char *url);

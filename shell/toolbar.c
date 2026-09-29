@@ -6,11 +6,12 @@ static void on_fwd(GtkWidget *w, WedBrowser *b)    { (void)w; WedTab *t = browse
 static void on_reload(GtkWidget *w, WedBrowser *b) { (void)w; WedTab *t = browser_active_tab(b); if (t && t->webview) webkit_web_view_reload(WEBKIT_WEB_VIEW(t->webview)); }
 static void on_home(GtkWidget *w, WedBrowser *b)   { (void)w; browser_load_url(b, "wed://start"); }
 
-static void on_menu_btn(GtkWidget *w, WedBrowser *b) {
-    (void)w;
-    GdkEventButton ev = { 0 };
-    ev.type = GDK_BUTTON_PRESS;
-    menu_popup_app_menu(b, &ev);
+static gboolean on_menu_btn(GtkWidget *w, GdkEventButton *ev, WedBrowser *b) {
+    if (ev->type == GDK_BUTTON_PRESS && ev->button == 1) {
+        menu_popup_app_menu(b, ev);
+        return TRUE;   /* consume: popup handled here, not via clicked */
+    }
+    return FALSE;
 }
 
 static void on_shield(GtkWidget *w, WedBrowser *b) {
@@ -67,7 +68,7 @@ GtkWidget *toolbar_new(WedBrowser *b) {
     g_signal_connect(b->btn_home, "clicked", G_CALLBACK(on_home), b);
     g_signal_connect(b->btn_shield, "clicked", G_CALLBACK(on_shield), b);
     g_signal_connect(b->btn_downloads, "clicked", G_CALLBACK(on_downloads), b);
-    g_signal_connect(b->btn_menu, "clicked", G_CALLBACK(on_menu_btn), b);
+    g_signal_connect(b->btn_menu, "button-press-event", G_CALLBACK(on_menu_btn), b);
 
     gtk_widget_show_all(bar);
     return bar;

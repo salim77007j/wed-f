@@ -6,7 +6,7 @@ mkdir -p "$OUT"
 rm -f "$OUT"/*.png
 cd /home/z/my-project/repo
 
-sh() { xwd -root -out "$OUT/$1.xwd"; python3 /home/z/my-project/scripts/xwd2png.py "$OUT/$1.xwd" "$OUT/$1.png" >/dev/null && echo "shot $1"; }
+sh() { python3 /home/z/my-project/scripts/wed_screenshot.py "$OUT/$1.png" >/dev/null && echo "shot $1"; }
 key() { xdotool key "$1"; sleep "$2"; }
 
 export WED_FORCE_SOFTWARE_RENDERING=1
@@ -78,10 +78,8 @@ xdotool mousemove 1220 65; xdotool click 1; sleep 1
 sh 13_downloads
 xdotool key Escape; sleep 0.3
 
-# ---- settings (menu + keyboard navigation: Settings is the 13th item) ----
-xdotool mousemove 1258 65; xdotool click 1; sleep 1.2
-for i in $(seq 1 13); do xdotool key Down; sleep 0.15; done
-xdotool key Return; sleep 1.5
+# ---- settings via Ctrl+, (Chrome shortcut, also in app menu) ----
+xdotool key ctrl+comma; sleep 2
 sh 14_settings
 xdotool key Escape; sleep 0.5
 

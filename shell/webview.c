@@ -133,6 +133,11 @@ static void on_load_changed(WebKitWebView *wv, WebKitLoadEvent ev, WedTab *t) {
         t->title = g_strdup(title && *title ? title : (uri && *uri ? uri : "New tab"));
         tabstrip_update(b);
         browser_update_omnibox(b);
+        {
+            char *full = g_strdup_printf("%s — WED", t->title);
+            gtk_window_set_title(GTK_WINDOW(b->window), full);
+            g_free(full);
+        }
         break;
     }
     default:
@@ -146,6 +151,11 @@ static void on_title_changed(WebKitWebView *wv, GParamSpec *ps, WedTab *t) {
     g_free(t->title);
     t->title = g_strdup(title && *title ? title : (t->url ? t->url : "New tab"));
     tabstrip_update(t->b);
+    if (t->b->tabs->len && t == g_ptr_array_index(t->b->tabs, t->b->active)) {
+        char *full = g_strdup_printf("%s — WED", t->title);
+        gtk_window_set_title(GTK_WINDOW(t->b->window), full);
+        g_free(full);
+    }
 }
 
 static void on_favicon_changed(WebKitWebView *wv, GParamSpec *ps, WedTab *t) {
@@ -168,18 +178,44 @@ static void on_favicon_changed(WebKitWebView *wv, GParamSpec *ps, WedTab *t) {
     }
 }
 
+static void show_add_shortcut_dialog(WedBrowser *b);
+
 static gboolean on_decide_policy(WebKitWebView *wv, WebKitPolicyDecision *d,
                                  WebKitPolicyDecisionType type, WedTab *t) {
     if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) {
         WebKitNavigationAction *act =
             webkit_navigation_policy_decision_get_navigation_action(
                 WEBKIT_NAVIGATION_POLICY_DECISION(d));
+        WebKitURIRequest *req = webkit_navigation_action_get_request(act);
+        const char *uri = webkit_uri_request_get_uri(req);
+
+        /* internal action URLs from the start page (all real features) */
+        if (g_str_has_prefix(uri, "wed://settings")) {
+            settings_window_open(t->b);
+            webkit_policy_decision_ignore(d);
+            return TRUE;
+        }
+        if (g_str_has_prefix(uri, "wed://ai")) {
+            ai_ask_about_page(t->b);
+            webkit_policy_decision_ignore(d);
+            return TRUE;
+        }
+        if (g_str_has_prefix(uri, "wed://add-shortcut")) {
+            show_add_shortcut_dialog(t->b);
+            webkit_policy_decision_ignore(d);
+            return TRUE;
+        }
+        if (g_str_has_prefix(uri, "wed://history-panel")) {
+            browser_toggle_panel(t->b, 1);
+            webkit_policy_decision_ignore(d);
+            return TRUE;
+        }
+
         if (webkit_navigation_action_get_navigation_type(act)
                 == WEBKIT_NAVIGATION_TYPE_LINK_CLICKED) {
             unsigned mods = webkit_navigation_action_get_modifiers(act);
             if (mods & GDK_CONTROL_MASK) {
-                WebKitURIRequest *req = webkit_navigation_action_get_request(act);
-                browser_add_tab(t->b, webkit_uri_request_get_uri(req));
+                browser_add_tab(t->b, uri);
                 webkit_policy_decision_ignore(d);
                 return TRUE;
             }
@@ -332,6 +368,53 @@ static gboolean on_context_menu(WebKitWebView *wv, WebKitContextMenu *menu,
 }
 
 /* ---------------------------------------------------------------- create */
+
+/* real "Add shortcut" dialog from the start page (+ tile): name + URL,
+ * stored into the bookmarks DB under the "startpage" folder. */
+static void show_add_shortcut_dialog(WedBrowser *b) {
+    GtkWidget *dlg = gtk_dialog_new_with_buttons("Add shortcut",
+        GTK_WINDOW(b->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Done", GTK_RESPONSE_OK, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dlg), 420, -1);
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 14);
+
+    GtkWidget *nl = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(nl), "<b>Name</b>");
+    gtk_widget_set_halign(nl, GTK_ALIGN_START);
+    GtkWidget *name = gtk_entry_new();
+    gtk_widget_set_margin_bottom(name, 12);
+    GtkWidget *ul = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(ul), "<b>URL</b>");
+    gtk_widget_set_halign(ul, GTK_ALIGN_START);
+    GtkWidget *url = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(url), "https://example.com");
+
+    gtk_box_pack_start(GTK_BOX(content), nl, FALSE, FALSE, 4);
+    gtk_box_pack_start(GTK_BOX(content), name, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(content), ul, FALSE, FALSE, 4);
+    gtk_box_pack_start(GTK_BOX(content), url, FALSE, FALSE, 2);
+    gtk_widget_show_all(content);
+
+    if (gtk_dialog_run(GTK_DIALOG(dlg)) == GTK_RESPONSE_OK) {
+        const char *u = gtk_entry_get_text(GTK_ENTRY(url));
+        const char *nm = gtk_entry_get_text(GTK_ENTRY(name));
+        if (u && *u) {
+            char *full;
+            if (strstr(u, "://")) full = g_strdup(u);
+            else full = g_strdup_printf("https://%s", u);
+            wed_bookmark_add(full, (nm && *nm) ? nm : full, "startpage");
+            g_free(full);
+            /* reload the start page in the active tab so the tile appears */
+            WedTab *t = browser_active_tab(b);
+            if (t && t->webview && g_str_has_prefix(t->url ? t->url : "", "wed://start"))
+                webkit_web_view_reload(WEBKIT_WEB_VIEW(t->webview));
+            bookmarkbar_refresh(b);
+        }
+    }
+    gtk_widget_destroy(dlg);
+}
+
 GtkWidget *webview_new(WedBrowser *b, WedTab *t, const char *url) {
     WebKitSettings *st = webkit_settings_new();
     webkit_settings_set_enable_javascript(st, TRUE);

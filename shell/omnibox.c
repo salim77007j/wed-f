@@ -317,9 +317,9 @@ static void omnibox_restore(WedBrowser *b) {
 void omnibox_update(WedBrowser *b) {
     WedTab *t = browser_active_tab(b);
     if (!t) return;
-    if (gtk_widget_has_focus(omni.entry)) { g_print("DBG omnibox_update SKIPPED (focus)\n"); return; }
-    if (b->sugg_popover && gtk_widget_is_visible(b->sugg_popover)) { g_print("DBG omnibox_update SKIPPED (popover)\n"); return; }
-    g_print("DBG omnibox_update WROTE '%s'\n", t->url ? t->url : "");
+    if (gtk_widget_has_focus(omni.entry)) return;
+    if (b->sugg_popover && gtk_widget_is_visible(b->sugg_popover)) return;
+    
     const char *uri = t->url ? t->url : "";
     gtk_entry_set_text(GTK_ENTRY(omni.entry),
         g_str_has_prefix(uri, "wed://start") ? "" : uri);

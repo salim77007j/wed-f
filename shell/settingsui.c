@@ -1,5 +1,8 @@
-/* settingsui.c — settings window generated from the core's settings
- * schema (single source of truth): sidebar sections + live-applied rows. */
+/* settingsui.c — Chrome-style settings (per wed45 reference): 256px sidebar
+ * with icons + pill-selected active item, "Settings" title + in-page search
+ * field, Material rows (icon + title + description + control) separated by
+ * hairline dividers. Schema-driven from the Rust core (single source of
+ * truth), live-applied. Search filters rows across all sections. */
 #include "wed.h"
 
 static GtkWidget *settings_win;
@@ -9,11 +12,21 @@ static GPtrArray *widgets;   /* GtkWidget* bound to keys */
 typedef struct {
     char *key;
     GtkWidget *w;
-    int kind;   /* 0 bool, 1 choice, 2 string, 3 number, 4 folder
-                   (number/string share entry) */
+    int kind;   /* 0 bool, 1 choice, 2 string, 3 number */
 } Bind;
 
+typedef struct {
+    char *key, *label, *hint;
+    GtkWidget *row;        /* the row container (for search filtering) */
+    int section;
+} RowMeta;
+
+static GPtrArray *row_metas;  /* RowMeta* for search */
+
 static void bind_free(Bind *b) { g_free(b->key); g_free(b); }
+static void rowmeta_free(RowMeta *r) {
+    g_free(r->key); g_free(r->label); g_free(r->hint); g_free(r);
+}
 
 static void apply_setting(WedBrowser *b, const char *key, const char *val) {
     wed_settings_save(key, val);
@@ -21,10 +34,12 @@ static void apply_setting(WedBrowser *b, const char *key, const char *val) {
     if (!strcmp(key, "theme.mode") || !strcmp(key, "theme.accent")) {
         theme_init();
         theme_apply();
-        /* icons are theme-dependent: recreate window visuals */
+        icons_init();                    /* icons are theme-colored */
         browser_update_shield_ui(b);
         omnibox_update(b);
     }
+    if (!strncmp(key, "hibernate.", 10) || !strncmp(key, "gpu.", 4))
+        browser_save_session(b);         /* governor re-reads settings */
 }
 
 static void on_switch(GtkSwitch *sw, gboolean state, gpointer ud) {
@@ -65,15 +80,102 @@ static void on_folder(GtkWidget *btn, gpointer ud) {
     gtk_widget_destroy(dlg);
 }
 
+/* Chrome-style sidebar item: icon + label, pill-selected state */
+static GtkWidget *side_item_new(const char *label, WedIcon ic) {
+    GtkWidget *btn = gtk_button_new();
+    gtk_widget_set_name(btn, "sideitem");
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_halign(hbox, GTK_ALIGN_START);
+    GtkWidget *img = gtk_image_new_from_pixbuf(icon_get(ic, 17));
+    GtkWidget *lbl = gtk_label_new(label);
+    gtk_widget_set_name(lbl, "sidelbl");
+    gtk_box_pack_start(GTK_BOX(hbox), img, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hbox), lbl, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(btn), hbox);
+    return btn;
+}
+
 static void on_sidebar_btn(GtkWidget *w, gpointer st) {
+    /* reset all, then pill-highlight active (Chrome #E8F0FE) */
+    GList *kids = gtk_container_get_children(GTK_CONTAINER(gtk_widget_get_parent(w)));
+    for (GList *k = kids; k; k = k->next) {
+        GtkWidget *c = k->data;
+        if (GTK_IS_BUTTON(c)) gtk_widget_set_name(c, "sideitem");
+    }
+    g_list_free(kids);
+    gtk_widget_set_name(w, "sideitem-on");
     gtk_stack_set_visible_child_name(GTK_STACK(st),
-        (const char*)g_object_get_data(G_OBJECT(w), "target"));
+        (const char *)g_object_get_data(G_OBJECT(w), "target"));
+}
+
+static void on_search_changed(GtkWidget *e, gpointer ud) {
+    (void)ud;
+    const char *q = gtk_entry_get_text(GTK_ENTRY(e));
+    gboolean empty = !q || !*q;
+    for (guint i = 0; row_metas && i < row_metas->len; i++) {
+        RowMeta *m = g_ptr_array_index(row_metas, i);
+        gboolean show = empty
+            || (m->key   && strcasestr(m->key, q))
+            || (m->label && strcasestr(m->label, q))
+            || (m->hint  && strcasestr(m->hint, q));
+        gtk_widget_set_visible(m->row, show);
+    }
 }
 
 static void on_closed(GtkWidget *w, gpointer ud) {
     (void)w; (void)ud;
     settings_win = NULL;
+    if (row_metas) g_ptr_array_unref(row_metas);
+    row_metas = NULL;
 }
+
+/* per-key icons: Chrome's settings maps every row to a meaningful glyph */
+static WedIcon icon_for_key(const char *key) {
+    if (!strcmp(key, "block.ads"))            return IC_SHIELD;
+    if (!strcmp(key, "block.trackers"))       return IC_EYE;
+    if (!strcmp(key, "block.cosmetic"))       return IC_SHIELD_OFF;
+    if (!strcmp(key, "fingerprint.protection")) return IC_FINGERPRINT;
+    if (!strcmp(key, "cookies.thirdparty"))   return IC_COOKIE;
+    if (!strcmp(key, "privacy.itp"))          return IC_SHIELD;
+    if (!strcmp(key, "privacy.doh"))          return IC_GLOBE;
+    if (!strcmp(key, "privacy.send_dnt"))     return IC_PERSON;
+    if (!strcmp(key, "privacy.send_gpc"))     return IC_PERSON;
+    if (!strcmp(key, "theme.mode"))           return IC_MOON;
+    if (!strcmp(key, "theme.accent"))         return IC_PALETTE;
+    if (!strcmp(key, "toolbar.compact"))      return IC_WINDOW;
+    if (!strcmp(key, "startpage.show_bookmarks")) return IC_BOOKMARK;
+    if (!strcmp(key, "startpage.background")) return IC_PALETTE;
+    if (!strcmp(key, "startpage.search"))     return IC_SEARCH;
+    if (!strcmp(key, "downloads.ask_location")) return IC_DOWNLOAD;
+    if (!strcmp(key, "downloads.dir"))        return IC_FOLDER;
+    if (!strcmp(key, "session.restore_prompt")) return IC_RESET;
+    if (!strcmp(key, "tab.warn_on_close"))    return IC_TAB;
+    if (!strcmp(key, "find.wrap"))            return IC_SEARCH;
+    if (!strcmp(key, "hibernate.enabled"))    return IC_GAUGE;
+    if (!strcmp(key, "hibernate.idle.minutes")) return IC_HISTORY;   /* clock */
+    if (!strcmp(key, "cache.disk_mb"))        return IC_COMPUTER;
+    if (!strcmp(key, "gpu.software_fallback")) return IC_COMPUTER;
+    if (!strcmp(key, "ai.enabled"))           return IC_AI;
+    if (!strcmp(key, "ai.model"))             return IC_AI;
+    if (!strcmp(key, "net.https_first"))      return IC_LOCK;
+    if (!strcmp(key, "net.proxy"))            return IC_GLOBE;
+    return IC_GEAR;
+}
+
+/* Chrome section display names + icons (mapped from core schema sections) */
+static const char *SECTIONS[] = {
+    "You and WED", "Privacy and security", "Appearance", "Behavior",
+    "Performance", "AI Assist", "Network", "About"
+};
+static const WedIcon SEC_ICONS[] = {
+    IC_PERSON, IC_SHIELD, IC_PALETTE, IC_GEAR,
+    IC_GAUGE, IC_AI, IC_GLOBE, IC_INFO
+};
+/* core schema section name → our sidebar slot */
+static const char *SEC_MAP[] = {
+    NULL, "Privacy", "Appearance", "Behavior",
+    "Performance", "AI Assist", "Network", NULL
+};
 
 void settings_window_open(WedBrowser *b) {
     if (settings_win) {
@@ -81,223 +183,305 @@ void settings_window_open(WedBrowser *b) {
         return;
     }
     widgets = g_ptr_array_new_with_free_func((GDestroyNotify)bind_free);
+    row_metas = g_ptr_array_new_with_free_func((GDestroyNotify)rowmeta_free);
+
     settings_win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(settings_win), "Settings");
-    gtk_window_set_default_size(GTK_WINDOW(settings_win), 860, 640);
+    gtk_window_set_default_size(GTK_WINDOW(settings_win), 980, 680);
     gtk_window_set_transient_for(GTK_WINDOW(settings_win), GTK_WINDOW(b->window));
     g_object_set_data(G_OBJECT(settings_win), "wed-browser", b);
     g_signal_connect(settings_win, "destroy", G_CALLBACK(on_closed), NULL);
 
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-    /* sidebar */
-    GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_name(sidebar, "panel");
-    gtk_widget_set_size_request(sidebar, 230, -1);
-    GtkWidget *logo = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(logo), "  <span size='large' weight='bold'>Settings</span>");
-    gtk_widget_set_halign(logo, GTK_ALIGN_START);
-    gtk_widget_set_margin_top(logo, 12);
-    gtk_widget_set_margin_bottom(logo, 12);
-    gtk_box_pack_start(GTK_BOX(sidebar), logo, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hbox), sidebar, FALSE, FALSE, 0);
+    /* ---------------- sidebar (Chrome: 256px, pill selection) ------------- */
+    GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_name(sidebar, "sidebar");
+    gtk_widget_set_size_request(sidebar, 232, -1);
+    gtk_container_set_border_width(GTK_CONTAINER(sidebar), 10);
 
     /* content stack */
     stack = gtk_stack_new();
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+
+    GtkWidget *side_btns[8];
+    GtkWidget *pages[8];
+    for (int s = 0; s < 8; s++) {
+        /* page: scrollable column with per-section content */
+        GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        pages[s] = page;                       /* keep direct reference —
+                                                   scrolled windows wrap children
+                                                   in a viewport, so re-fetching
+                                                   via gtk_bin_get_child would
+                                                   return the viewport instead */
+        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+            GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+        gtk_container_set_border_width(GTK_CONTAINER(page), 0);
+        gtk_container_add(GTK_CONTAINER(scroll), page);
+        gtk_stack_add_named(GTK_STACK(stack), scroll, SECTIONS[s]);
+
+        GtkWidget *btn = side_item_new(SECTIONS[s], SEC_ICONS[s]);
+        g_object_set_data(G_OBJECT(btn), "target", (gpointer)SECTIONS[s]);
+        gtk_widget_set_halign(btn, GTK_ALIGN_FILL);
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_sidebar_btn), stack);
+        gtk_box_pack_start(GTK_BOX(sidebar), btn, FALSE, FALSE, 0);
+        side_btns[s] = btn;
+        g_object_set_data(G_OBJECT(page), "wed-slot", GINT_TO_POINTER(s));
+    }
+    gtk_box_pack_start(GTK_BOX(hbox), sidebar, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hbox), stack, TRUE, TRUE, 0);
 
     char *schema = wed_settings_schema();
     int n = json_count(schema);
 
-    const char *sections[] = { "Privacy", "Appearance", "Behavior",
-                               "Performance", "AI Assist", "Network", "About" };
-    const char *icons[] = { "Privacy", "Appearance", "Behavior",
-                            "Performance", "AI Assist", "Network", "About" };
-    (void)icons;
+    /* every page gets: title row, search field, then section rows */
+    for (int s = 0; s < 8; s++) {
+        GtkWidget *head = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+        gtk_widget_set_margin_top(head, 28);
+        gtk_widget_set_margin_bottom(head, 14);
+        gtk_widget_set_margin_start(head, 48);
+        gtk_widget_set_margin_end(head, 48);
 
-    GPtrArray *sec_boxes = g_ptr_array_new();
-    for (int s = 0; s < 7; s++) {
-        GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
-            GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-        gtk_container_add(GTK_CONTAINER(scroll), page);
-        gtk_stack_add_named(GTK_STACK(stack), scroll, sections[s]);
+        if (s == 0) {
+            /* "You and WED" profile card */
+            GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+            gtk_widget_set_name(card, "youcard");
+            gtk_widget_set_margin_start(card, 0);
+            GtkWidget *av = gtk_image_new_from_pixbuf(icon_get(IC_PERSON, 40));
+            gtk_widget_set_size_request(av, 44, 44);
+            GtkWidget *vv = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+            GtkWidget *nm = gtk_label_new("WED local profile");
+            gtk_widget_set_name(nm, "rowtitle");
+            gtk_widget_set_halign(nm, GTK_ALIGN_START);
+            GtkWidget *em = gtk_label_new("Data stays on this device — no account, no sync");
+            gtk_widget_set_name(em, "rowhint");
+            gtk_widget_set_halign(em, GTK_ALIGN_START);
+            gtk_box_pack_start(GTK_BOX(vv), nm, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(vv), em, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(card), av, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(card), vv, TRUE, TRUE, 0);
+            gtk_box_pack_start(GTK_BOX(head), card, FALSE, FALSE, 8);
+        } else if (s == 7) {
+            /* About */
+            char *ver = g_strdup_printf("WebKit %d.%d.%d",
+                WEBKIT_MAJOR_VERSION, WEBKIT_MINOR_VERSION, WEBKIT_MICRO_VERSION);
+            GtkWidget *about = gtk_label_new(NULL);
+            char *mk = g_strdup_printf(
+                "<span size='xx-large' weight='bold'>WED</span>\n"
+                "<span color='gray'>version 2.0 · engine %s</span>\n\n"
+                "Engine-agnostic browser core in Rust.\n"
+                "Native GTK3 shell · no web-tech UI.\n"
+                "Filter lists: EasyList + EasyPrivacy.",
+                ver);
+            gtk_label_set_markup(GTK_LABEL(about), mk);
+            g_free(mk); g_free(ver);
+            gtk_label_set_justify(GTK_LABEL(about), GTK_JUSTIFY_CENTER);
+            gtk_widget_set_margin_top(about, 80);
+            gtk_box_pack_start(GTK_BOX(head), about, TRUE, TRUE, 0);
+        }
 
-        GtkWidget *btn = gtk_button_new_with_label(sections[s]);
-        gtk_widget_set_halign(btn, GTK_ALIGN_FILL);
-        g_object_set_data(G_OBJECT(btn), "target", (gpointer)sections[s]);
-        gtk_box_pack_start(GTK_BOX(sidebar), btn, FALSE, FALSE, 1);
-        g_signal_connect(btn, "clicked", G_CALLBACK(on_sidebar_btn), stack);
-        g_ptr_array_add(sec_boxes, page);
+        if (s != 7) {
+            GtkWidget *title = gtk_label_new(s == 0 ? NULL : SECTIONS[s]);
+            if (s == 0) gtk_label_set_markup(GTK_LABEL(title), "<span size='large' weight='bold'>You and WED</span>");
+            gtk_widget_set_name(title, "pagetitle");
+            gtk_widget_set_halign(title, GTK_ALIGN_START);
+            gtk_box_pack_start(GTK_BOX(head), title, FALSE, FALSE, 0);
+
+            GtkWidget *searchhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            gtk_widget_set_name(searchhbox, "searchpill");
+            GtkWidget *simg = gtk_image_new_from_pixbuf(icon_get(IC_SEARCH, 15));
+            gtk_widget_set_margin_start(simg, 12);
+            gtk_widget_set_valign(simg, GTK_ALIGN_CENTER);
+            GtkWidget *se = gtk_entry_new();
+            gtk_entry_set_placeholder_text(GTK_ENTRY(se), "Search settings");
+            gtk_widget_set_hexpand(se, TRUE);
+            g_signal_connect(se, "changed", G_CALLBACK(on_search_changed), NULL);
+            gtk_box_pack_start(GTK_BOX(searchhbox), simg, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(searchhbox), se, TRUE, TRUE, 0);
+            gtk_widget_set_size_request(searchhbox, 360, -1);
+            gtk_widget_set_halign(searchhbox, GTK_ALIGN_START);
+            gtk_box_pack_start(GTK_BOX(head), searchhbox, FALSE, FALSE, 6);
+        }
+        gtk_box_pack_start(GTK_BOX(pages[s]), head, FALSE, FALSE, 0);
     }
 
-    /* build rows into sections */
+    /* ---------------- build rows from schema ---------------- */
+    GtkWidget *sec_boxes[8];
+    for (int s = 0; s < 8; s++) {
+        GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_margin_start(vbox, 48);
+        gtk_widget_set_margin_end(vbox, 48);
+        gtk_widget_set_margin_bottom(vbox, 32);
+        gtk_box_pack_start(GTK_BOX(pages[s]), vbox, FALSE, FALSE, 0);
+        sec_boxes[s] = vbox;
+    }
+
     for (int i = 0; i < n; i++) {
         char *key = json_array_str(schema, i, "key");
         char *label = json_array_str(schema, i, "label");
         char *kind = json_array_str(schema, i, "kind");
         char *def = json_array_str(schema, i, "default");
         char *hint = json_array_str(schema, i, "hint");
-        if (!key || !label || !kind) { g_free(key); g_free(label); g_free(kind); g_free(def); g_free(hint); continue; }
-
-        /* find section */
-        int sec = 5;
         char *section = json_array_str(schema, i, "section");
-        for (int s = 0; s < 6; s++)
-            if (section && !strcmp(section, sections[s])) { sec = s; break; }
-        free(section);
+        if (!key || !label || !kind) {
+            g_free(key); g_free(label); g_free(kind); g_free(def);
+            g_free(hint); g_free(section); continue;
+        }
 
-        GtkWidget *page = g_ptr_array_index(sec_boxes, sec);
-        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-        gtk_widget_set_name(row, "card");
-        GtkWidget *top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-        gtk_container_set_border_width(GTK_CONTAINER(row), 4);
-        gtk_widget_set_margin_start(row, 16);
-        gtk_widget_set_margin_end(row, 16);
-        gtk_widget_set_margin_top(row, 4);
-        gtk_widget_set_margin_bottom(row, 4);
+        int sec = 3;
+        for (int s = 1; s < 7; s++)
+            if (section && !strcmp(section, SEC_MAP[s])) { sec = s; break; }
+        g_free(section);
 
+        GtkWidget *vbox = sec_boxes[sec];
+
+        /* hairline divider between rows (Chrome: indented under icon) */
+        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+        gtk_widget_set_name(row, "settingrow");
+        gtk_widget_set_size_request(row, -1, 56);
+
+        GtkWidget *icon = gtk_image_new_from_pixbuf(icon_get(icon_for_key(key), 19));
+        gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+        gtk_widget_set_margin_start(icon, 4);
+        gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+
+        GtkWidget *txt = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
         GtkWidget *lbl = gtk_label_new(label);
+        gtk_widget_set_name(lbl, "rowtitle");
         gtk_widget_set_halign(lbl, GTK_ALIGN_START);
-        gtk_box_pack_start(GTK_BOX(top), lbl, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(txt), lbl, FALSE, FALSE, 0);
+        if (hint && *hint) {
+            GtkWidget *h = gtk_label_new(hint);
+            gtk_widget_set_name(h, "rowhint");
+            gtk_widget_set_halign(h, GTK_ALIGN_START);
+            gtk_label_set_line_wrap(GTK_LABEL(h), TRUE);
+            gtk_label_set_xalign(GTK_LABEL(h), 0.0);
+            gtk_label_set_max_width_chars(GTK_LABEL(h), 46);
+            gtk_box_pack_start(GTK_BOX(txt), h, FALSE, FALSE, 0);
+        }
+        gtk_box_pack_start(GTK_BOX(row), txt, TRUE, TRUE, 0);
+
         GtkWidget *widget = NULL;
         int bkind = 0;
 
         if (!strcmp(kind, "bool")) {
             widget = gtk_switch_new();
+            gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
+            gtk_widget_set_margin_end(widget, 8);
             char *cur = wed_settings_str(key, def ? def : "true");
             gtk_switch_set_active(GTK_SWITCH(widget), !strcmp(cur, "true"));
-            free(cur);
+            g_free(cur);
             bkind = 0;
         } else if (!strcmp(kind, "choice")) {
             widget = gtk_combo_box_text_new();
-            /* count options by parsing schema string manually is hard here;
-               use known keys */
-            if (!strcmp(key, "theme.mode")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Light");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Dark");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Follow system");
-            } else if (!strcmp(key, "theme.accent")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Blue");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Teal");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Violet");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Rose");
-            } else if (!strcmp(key, "startpage.search")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "DuckDuckGo");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Google");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Bing");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "Wikipedia");
-            } else if (!strcmp(key, "ai.model")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "glm-4-flash");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "glm-4.5");
-            } else if (!strcmp(key, "cookies.thirdparty")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "block");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "allow");
-            } else if (!strcmp(key, "startpage.background")) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "plain");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), "gradient");
-            }
+            static const struct { const char *key; const char *opts[5]; } CHOICES[] = {
+                { "theme.mode",          { "light", "dark", NULL } },
+                { "theme.accent",        { "blue", "teal", "violet", "rose", NULL } },
+                { "startpage.search",    { "duckduckgo", "google", "bing", "wikipedia", NULL } },
+                { "startpage.background",{ "gradient", "plain", NULL } },
+                { "ai.model",            { "glm-4-flash", "glm-4.5", NULL } },
+                { "cookies.thirdparty",  { "block", "allow", NULL } },
+            };
+            const char **opts = NULL;
+            for (guint c = 0; c < sizeof CHOICES / sizeof CHOICES[0]; c++)
+                if (!strcmp(CHOICES[c].key, key)) { opts = CHOICES[c].opts; break; }
+            if (!opts) { opts = (const char*[]){ def ? def : "", NULL }; }
+            for (int o = 0; opts[o]; o++)
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widget), opts[o]);
             char *cur = wed_settings_str(key, def ? def : "");
-            /* map value → index */
-            GtkTreeModel *m = gtk_combo_box_get_model(GTK_COMBO_BOX(widget));
-            GtkTreeIter it;
             int idx = 0;
-            if (gtk_tree_model_get_iter_first(m, &it)) {
-                do {
-                    gchar *txt = NULL;
-                    gtk_tree_model_get(m, &it, 0, &txt, -1);
-                    if (txt && !g_ascii_strcasecmp(txt, cur)) { g_free(txt); break; }
-                    g_free(txt);
-                    idx++;
-                } while (gtk_tree_model_iter_next(m, &it));
+            for (int o = 0; opts[o]; o++) {
+                if (opts[o] && !g_ascii_strcasecmp(opts[o], cur)) { idx = o; break; }
             }
-            if (idx >= gtk_tree_model_iter_n_children(m, NULL)) idx = 0;
             gtk_combo_box_set_active(GTK_COMBO_BOX(widget), idx);
-            free(cur);
+            g_free(cur);
+            gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
+            gtk_widget_set_margin_end(widget, 8);
             bkind = 1;
         } else if (!strcmp(kind, "string")) {
             widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
             GtkWidget *e = gtk_entry_new();
             char *cur = wed_settings_str(key, def ? def : "");
             gtk_entry_set_text(GTK_ENTRY(e), cur);
-            free(cur);
+            gtk_entry_set_placeholder_text(GTK_ENTRY(e),
+                !strcmp(key, "downloads.dir") ? "System Downloads folder" : "");
+            g_free(cur);
+            gtk_widget_set_valign(e, GTK_ALIGN_CENTER);
             gtk_box_pack_start(GTK_BOX(widget), e, TRUE, TRUE, 0);
             if (!strcmp(key, "downloads.dir")) {
                 GtkWidget *fb = gtk_button_new_with_label("Browse…");
                 g_object_set_data(G_OBJECT(fb), "entry", e);
                 gtk_box_pack_start(GTK_BOX(widget), fb, FALSE, FALSE, 0);
-                g_object_set_data(G_OBJECT(fb), "entry", e);
                 Bind *fbnd = g_new0(Bind, 1);
                 fbnd->key = g_strdup(key);
                 fbnd->w = widget;
                 g_object_set_data_full(G_OBJECT(fb), "bind", fbnd, (GDestroyNotify)bind_free);
                 g_signal_connect(fb, "clicked", G_CALLBACK(on_folder), fbnd);
             }
+            gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
+            gtk_widget_set_margin_end(widget, 8);
             bkind = 2;
         } else if (!strcmp(kind, "number")) {
             widget = gtk_entry_new();
             char *cur = wed_settings_str(key, def ? def : "");
             gtk_entry_set_text(GTK_ENTRY(widget), cur);
-            free(cur);
+            g_free(cur);
             gtk_entry_set_width_chars(GTK_ENTRY(widget), 8);
+            gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
+            gtk_widget_set_margin_end(widget, 8);
             bkind = 3;
         }
-        gtk_box_pack_end(GTK_BOX(top), widget, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(row), top, TRUE, TRUE, 0);
-        if (hint && *hint) {
-            GtkWidget *h = gtk_label_new(hint);
-            gtk_widget_set_name(h, "secondary");
-            gtk_widget_set_halign(h, GTK_ALIGN_START);
-            gtk_label_set_line_wrap(GTK_LABEL(h), TRUE);
-            gtk_label_set_xalign(GTK_LABEL(h), 0.0);
-            gtk_box_pack_start(GTK_BOX(row), h, TRUE, TRUE, 0);
-        }
-        gtk_box_pack_start(GTK_BOX(page), row, FALSE, FALSE, 0);
+        if (widget) gtk_box_pack_end(GTK_BOX(row), widget, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(vbox), row, FALSE, FALSE, 0);
+
+        /* divider after each row except the last-looking one */
+        GtkWidget *div = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+        gtk_widget_set_name(div, "rowdivider");
+        gtk_box_pack_start(GTK_BOX(vbox), div, FALSE, FALSE, 0);
+
+        /* register for search filtering */
+        RowMeta *meta = g_new0(RowMeta, 1);
+        meta->key = g_strdup(key);
+        meta->label = g_strdup(label);
+        meta->hint = g_strdup(hint ? hint : "");
+        meta->row = row;
+        meta->section = sec;
+        g_ptr_array_add(row_metas, meta);
 
         /* bind */
         Bind *bind = g_new0(Bind, 1);
         bind->key = g_strdup(key);
         bind->w = widget;
         bind->kind = bkind;
-        if (bkind == 0) g_signal_connect(widget, "state-set", G_CALLBACK(on_switch), bind);
-        else if (bkind == 1) g_signal_connect(widget, "changed", G_CALLBACK(on_combo), bind);
-        else if (bkind == 2) {
+        if (bkind == 0 && widget) g_signal_connect(widget, "state-set", G_CALLBACK(on_switch), bind);
+        else if (bkind == 1 && widget) g_signal_connect(widget, "changed", G_CALLBACK(on_combo), bind);
+        else if (bkind == 2 && widget) {
             GList *ch = gtk_container_get_children(GTK_CONTAINER(widget));
             if (ch) {
-                g_signal_connect(ch->data, "activate",
-                    G_CALLBACK(on_entry_apply), bind);
+                g_signal_connect(ch->data, "activate", G_CALLBACK(on_entry_apply), bind);
                 g_list_free(ch);
             }
-        } else if (bkind == 3) {
+        } else if (bkind == 3 && widget) {
             g_signal_connect(widget, "activate", G_CALLBACK(on_entry_apply), bind);
         }
         g_ptr_array_add(widgets, bind);
 
         g_free(key); g_free(label); g_free(kind); g_free(def); g_free(hint);
     }
-
-    /* About page */
-    GtkWidget *about = g_ptr_array_index(sec_boxes, 6);
-    GtkWidget *al = gtk_label_new(NULL);
-    char *ver = g_strdup_printf("WebKit %d.%d.%d",
-        WEBKIT_MAJOR_VERSION, WEBKIT_MINOR_VERSION, WEBKIT_MICRO_VERSION);
-    char *mk = g_strdup_printf(
-        "<span size='xx-large' weight='bold'>WED</span>\n"
-        "<span color='gray'>version 2.0 · %s</span>\n\n"
-        "Engine-agnostic browser core in Rust.\n"
-        "Native GTK3 shell · no web-tech UI.\n\n"
-        "<span size='small'>Filter lists: EasyList + EasyPrivacy. "
-        "Rendering: WebKitGTK (system component).</span>", ver);
-    gtk_label_set_markup(GTK_LABEL(al), mk);
-    g_free(mk);
-    g_free(ver);
-    gtk_label_set_justify(GTK_LABEL(al), GTK_JUSTIFY_CENTER);
-    gtk_widget_set_margin_top(al, 60);
-    gtk_container_add(GTK_CONTAINER(about), al);
+    free(schema);
 
     gtk_container_add(GTK_CONTAINER(settings_win), hbox);
     gtk_widget_show_all(settings_win);
-    free(schema);
+    /* window managers normally stack transients above their parent; under
+     * bare X (kiosks, Xvfb test rigs) nothing does it for us, so raise
+     * explicitly and pull focus. */
+    gtk_window_present(GTK_WINDOW(settings_win));
+    GdkWindow *gw = gtk_widget_get_window(settings_win);
+    if (gw) gdk_window_raise(gw);
+    gtk_widget_grab_focus(settings_win);
+
+    /* start on Privacy (Chrome starts on its landing section) */
+    gtk_widget_set_name(side_btns[1], "sideitem-on");
+    gtk_stack_set_visible_child_name(GTK_STACK(stack), SECTIONS[1]);
 }

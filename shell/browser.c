@@ -207,6 +207,12 @@ void browser_switch_tab(WedBrowser *b, int index) {
     browser_update_omnibox(b);
     tabstrip_update(b);
     browser_update_shield_ui(b);
+    {
+        const char *title = t->title && *t->title ? t->title : "New tab";
+        char *full = g_strdup_printf("%s — WED", title);
+        gtk_window_set_title(GTK_WINDOW(b->window), full);
+        g_free(full);
+    }
 }
 
 void browser_load_url(WedBrowser *b, const char *url) {
@@ -510,6 +516,9 @@ static gboolean on_key(GtkWidget *w, GdkEventKey *ev, WedBrowser *b) {
     case GDK_KEY_b:
         if (ctrl) { browser_toggle_panel(b, 2); return TRUE; }
         break;
+    case GDK_KEY_comma:
+        if (ctrl) { settings_window_open(b); return TRUE; }
+        break;
     case GDK_KEY_d:
         if (ctrl && t && t->url) {
             if (wed_is_bookmarked(t->url)) wed_bookmark_remove(t->url);
@@ -593,6 +602,23 @@ static gboolean on_key(GtkWidget *w, GdkEventKey *ev, WedBrowser *b) {
 }
 
 /* ---------------------------------------------------------------- window */
+/* global main-browser pointer for cross-module JS injection (weather etc.) */
+WedBrowser *wed_main_browser = NULL;
+
+/* run JS on every live start-page tab (used to push live data into the
+ * wed://start page — weather, stats — without reloading) */
+void browser_inject_js(const char *js) {
+    WedBrowser *b = wed_main_browser;
+    if (!b || !js) return;
+    for (guint i = 0; i < b->tabs->len; i++) {
+        WedTab *t = g_ptr_array_index(b->tabs, i);
+        if (t->webview && t->url && g_str_has_prefix(t->url, "wed://start")) {
+            webkit_web_view_evaluate_javascript(
+                WEBKIT_WEB_VIEW(t->webview), js, -1, NULL, NULL, NULL, NULL, NULL);
+        }
+    }
+}
+
 WedBrowser *browser_new(WebKitWebContext *ctx, WebKitUserContentFilter *filter,
                         const char *startup_url, gboolean private_mode) {
     WedBrowser *b = g_new0(WedBrowser, 1);
@@ -600,6 +626,7 @@ WedBrowser *browser_new(WebKitWebContext *ctx, WebKitUserContentFilter *filter,
     b->active = -1;
     b->context = ctx;
     b->content_filter = filter;
+    wed_main_browser = b;
 
     b->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_default_size(GTK_WINDOW(b->window), 1280, 850);
@@ -630,6 +657,12 @@ WedBrowser *browser_new(WebKitWebContext *ctx, WebKitUserContentFilter *filter,
 
     b->toolbar = toolbar_new(b);
     gtk_box_pack_start(GTK_BOX(b->vbox), b->toolbar, FALSE, FALSE, 0);
+
+    /* Chrome-style bookmarks bar (real DB-backed, toggleable) */
+    b->bookmarkbar = bookmarkbar_new(b);
+    gtk_box_pack_start(GTK_BOX(b->vbox), b->bookmarkbar, FALSE, FALSE, 0);
+    if (!wed_settings_bool("startpage.show_bookmarks", TRUE))
+        gtk_widget_hide(b->bookmarkbar);
 
     /* horizontal: side panel + content */
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);

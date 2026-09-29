@@ -6,8 +6,8 @@
 #define TAB_MAX_W 240
 #define TAB_MIN_W 56
 #define TAB_PIN_W 44
-#define STRIP_H   40
-#define RADIUS    10
+#define STRIP_H   38
+#define RADIUS    8
 
 typedef struct {
     WedBrowser *b;
@@ -57,12 +57,11 @@ static gboolean tab_draw(GtkWidget *w, cairo_t *cr, TabUI *ui) {
 
     WedColor bg;
     if (active) {
-        bg = g_theme.tab_active;
+        bg = g_theme.tab_active;          /* white, flows into white toolbar */
     } else if (ui->hover) {
-        bg = g_theme.dark ? (WedColor){0.16,0.17,0.20} : (WedColor){0.88,0.91,0.97};
-        bg = g_theme.tabstrip_bg; /* tint base; hover adds overlay below */
+        bg = g_theme.tab_hover;           /* #E8EAED */
     } else {
-        bg = g_theme.tabstrip_bg;
+        bg = g_theme.tabstrip_bg;         /* strip #F1F3F4 */
     }
 
     /* rounded-top tab shape */
@@ -84,17 +83,10 @@ static gboolean tab_draw(GtkWidget *w, cairo_t *cr, TabUI *ui) {
     cairo_set_source_rgb(cr, bg.r, bg.g, bg.b);
     cairo_fill(cr);
 
-    if (active) {
-        /* accent underline */
-        cairo_set_source_rgb(cr, g_theme.accent.r, g_theme.accent.g, g_theme.accent.b);
-        cairo_rectangle(cr, 4, height - 3, width - 8, 3);
-        cairo_fill(cr);
-    } else if (ui->hover) {
-        cairo_set_source_rgba(cr, 1, 1, 1, g_theme.dark ? 0.06 : 0.35);
-        cairo_paint(cr);
-    }
+    /* Chrome: subtle bottom shadow on the strip under active tab edges is
+     * skipped — active tab is simply white against the strip tint. */
 
-    /* separator between inactive tabs */
+    /* separator between inactive tabs (Chrome hairline) */
     if (!active && idx > 0) {
         cairo_set_source_rgba(cr, g_theme.tab_inactive_text.r,
                               g_theme.tab_inactive_text.g,

@@ -59,23 +59,20 @@ GtkWidget *privacy_popover_new(WedBrowser *b) {
     gtk_box_pack_start(GTK_BOX(vbox), site_row, FALSE, FALSE, 0);
     g_signal_connect(sw_shields, "state-set", G_CALLBACK(on_shield_toggle), b);
 
-    /* stats grid */
+    /* stats grid (Chrome Material: thin large numerals + secondary labels) */
     GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 18);
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 24);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 2);
+    gtk_widget_set_margin_top(grid, 6);
     const char *labels[] = { "Ads blocked", "Trackers blocked", "Pages loaded" };
     GtkWidget *stats[] = { NULL, NULL, NULL };
     for (int i = 0; i < 3; i++) {
-        GtkWidget *l = gtk_label_new(NULL);
-        char *mk = g_strdup_printf("<span size='large' weight='bold' foreground='#%02x%02x%02x'>—</span>",
-            (int)(g_theme.accent.r * 255), (int)(g_theme.accent.g * 255),
-            (int)(g_theme.accent.b * 255));
-        gtk_label_set_markup(GTK_LABEL(l), mk);
-        g_free(mk);
+        GtkWidget *l = gtk_label_new("0");
+        gtk_widget_set_name(l, "statbig");
+        gtk_widget_set_halign(l, GTK_ALIGN_START);
         GtkWidget *d = gtk_label_new(labels[i]);
         gtk_widget_set_name(d, "statlbl");
         gtk_widget_set_halign(d, GTK_ALIGN_START);
-        gtk_widget_set_halign(l, GTK_ALIGN_START);
         gtk_grid_attach(GTK_GRID(grid), l, i, 0, 1, 1);
         gtk_grid_attach(GTK_GRID(grid), d, i, 1, 1, 1);
         stats[i] = l;
@@ -85,10 +82,12 @@ GtkWidget *privacy_popover_new(WedBrowser *b) {
     lbl_pages = stats[2];
     gtk_box_pack_start(GTK_BOX(vbox), grid, FALSE, FALSE, 8);
 
-    /* top blocked hosts */
+    /* top blocked hosts (Chrome row style) */
     GtkWidget *top_hdr = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(top_hdr), "<b>Most blocked</b>");
+    gtk_label_set_markup(GTK_LABEL(top_hdr),
+        "<span size='medium' weight='bold'>Most blocked</span>");
     gtk_widget_set_halign(top_hdr, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(top_hdr, 8);
     gtk_box_pack_start(GTK_BOX(vbox), top_hdr, FALSE, FALSE, 0);
 
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
@@ -146,12 +145,19 @@ void privacy_refresh(WedBrowser *b) {
             double ads = json_array_num(json, i, "ads");
             double tr = json_array_num(json, i, "trackers");
             if (h) {
-                char *row = g_strdup_printf("%s — %d", h, (int)(ads + tr));
-                GtkWidget *l = gtk_label_new(row);
-                gtk_label_set_xalign(GTK_LABEL(l), 0.0);
-                gtk_widget_set_name(l, "panelurl");
-                gtk_container_add(GTK_CONTAINER(list), l);
-                g_free(row);
+                GtkWidget *r = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+                gtk_widget_set_name(r, "panelrow");
+                GtkWidget *hl = gtk_label_new(h);
+                gtk_widget_set_name(hl, "panelrowtitle");
+                gtk_label_set_ellipsize(GTK_LABEL(hl), PANGO_ELLIPSIZE_END);
+                gtk_label_set_xalign(GTK_LABEL(hl), 0.0);
+                gtk_box_pack_start(GTK_BOX(r), hl, TRUE, TRUE, 0);
+                char *cnt = g_strdup_printf("%d", (int)(ads + tr));
+                GtkWidget *cl = gtk_label_new(cnt);
+                gtk_widget_set_name(cl, "secondary");
+                gtk_box_pack_end(GTK_BOX(r), cl, FALSE, FALSE, 8);
+                gtk_container_add(GTK_CONTAINER(list), r);
+                g_free(cnt);
                 free(h);
             }
         }
